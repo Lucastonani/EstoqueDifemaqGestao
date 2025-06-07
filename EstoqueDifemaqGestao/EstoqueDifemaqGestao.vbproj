@@ -161,10 +161,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ColumnConfig.vb" />
-    <Compile Include="ConfiguracaoApp.vb" />
-    <Compile Include="DataHelper.vb" />
-    <Compile Include="Extensions.vb" />
-    <Compile Include="LogErros.vb" />
+    <Compile Include="Config\ConfiguracaoApp.vb" />
+    <Compile Include="Config\DatabaseConfig.vb" />
+    <Compile Include="Helpers\DataHelper.vb" />
+    <Compile Include="DeploymentChecklist.vb" />
+    <Compile Include="Helpers\Extensions.vb" />
+    <Compile Include="Helpers\LogErros.vb" />
     <Compile Include="MainForm.Designer.vb">
       <DependentUpon>MainForm.vb</DependentUpon>
     </Compile>
@@ -221,18 +223,21 @@
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
     <Compile Include="PowerQueryManager.vb" />
+    <Compile Include="Tests\TestFramework.vb" />
+    <Compile Include="Tests\TestRunner.vb" />
     <Compile Include="ThisWorkbook.Designer.vb">
       <DependentUpon>ThisWorkbook.Designer.xml</DependentUpon>
     </Compile>
     <Compile Include="ThisWorkbook.vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
-    <Compile Include="UcReposicaoEstoque.Designer.vb">
+    <Compile Include="Controls\UcReposicaoEstoque.Designer.vb">
       <DependentUpon>UcReposicaoEstoque.vb</DependentUpon>
     </Compile>
-    <Compile Include="UcReposicaoEstoque.vb">
+    <Compile Include="Controls\UcReposicaoEstoque.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Tests\UnitTests.vb" />
     <EmbeddedResource Include="My Project\Resources.resx">
       <Generator>VbMyResourcesResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.vb</LastGenOutput>

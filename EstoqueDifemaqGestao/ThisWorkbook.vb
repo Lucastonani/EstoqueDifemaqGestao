@@ -1,4 +1,5 @@
 ﻿Imports System.Windows.Forms
+Imports Excel = Microsoft.Office.Interop.Excel
 
 Public Class ThisWorkbook
     Private mainForm As MainForm
@@ -312,37 +313,68 @@ Public Class ThisWorkbook
     End Property
 
     ' Método público para obter a interface Workbook corretamente
+
+    Private Sub LimparTodosRecursos()
+        Try
+            ' Parar todos os timers primeiro
+            If mainForm IsNot Nothing AndAlso Not mainForm.IsDisposed Then
+                mainForm.Invoke(Sub()
+                                    ' Forçar limpeza de recursos do formulário
+                                    mainForm.Hide()
+                                    System.Windows.Forms.Application.DoEvents()
+                                End Sub)
+            End If
+
+            ' Garantir que o Excel seja restaurado mesmo em caso de erro
+            Try
+                RestaurarConfiguracoes()
+            Catch
+                ' Tentar restauração básica
+                If Me.Application IsNot Nothing Then
+                    Me.Application.Visible = True
+                    Me.Application.WindowState = Microsoft.Office.Interop.Excel.XlWindowState.xlNormal
+                End If
+            End Try
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "ThisWorkbook.LimparTodosRecursos")
+        End Try
+    End Sub
+
+    ' Adicionar validação no método ObterWorkbook
+
     Public Function ObterWorkbook() As Microsoft.Office.Interop.Excel.Workbook
         Try
-            ' Tentar múltiplas formas de obter o workbook
-            Dim workbook As Microsoft.Office.Interop.Excel.Workbook = Nothing
+            ' Verificar se está em processo de fechamento
+            If isShuttingDown Then Return Nothing
+
+            ' Validar se a aplicação ainda está ativa
+            If Me.Application Is Nothing Then Return Nothing
 
             ' 1ª tentativa: DirectCast com InnerObject
             Try
-                workbook = DirectCast(Me.InnerObject, Microsoft.Office.Interop.Excel.Workbook)
-                If workbook IsNot Nothing Then Return workbook
+                Dim wb = DirectCast(Me.InnerObject, Microsoft.Office.Interop.Excel.Workbook)
+                If wb IsNot Nothing Then
+                    Return wb
+                End If
             Catch
                 ' Continuar para próxima tentativa
             End Try
 
             ' 2ª tentativa: Através da aplicação
             Try
-                If Me.Application IsNot Nothing Then
-                    workbook = Me.Application.ActiveWorkbook
-                    If workbook IsNot Nothing Then Return workbook
+                If Me.Application.Workbooks.Count > 0 Then
+                    For Each wb As Microsoft.Office.Interop.Excel.Workbook In Me.Application.Workbooks
+                        If wb.Name = Me.Name Then
+                            Return wb
+                        End If
+                    Next
                 End If
             Catch
-                ' Continuar para próxima tentativa
+                ' Continuar
             End Try
 
-            ' 3ª tentativa: Tentar cast direto (pode falhar)
-            Try
-                workbook = CType(Me, Microsoft.Office.Interop.Excel.Workbook)
-            Catch
-                ' Última tentativa falhou
-            End Try
-
-            Return workbook
+            Return Nothing
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "ThisWorkbook.ObterWorkbook")
@@ -350,4 +382,14 @@ Public Class ThisWorkbook
         End Try
     End Function
 
+    Public Sub ExecutarTestes()
+        UnitTests.RunAllTests()
+    End Sub
+
+    ' No ThisWorkbook.vb, adicione:
+    Public Sub VerificarSistema()
+        DeploymentChecklist.RunAllChecks()
+    End Sub
+
 End Class
+
