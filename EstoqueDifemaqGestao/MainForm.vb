@@ -7,6 +7,7 @@ Public Class MainForm
     Private moduloAtual As String = ""
     Private isClosingControlled As Boolean = False
     Private isDisposing As Boolean = False
+    Private WithEvents btnTestes As Button
 
     Public Sub New()
         InitializeComponent()
@@ -33,8 +34,50 @@ Public Class MainForm
 
             LogErros.RegistrarInfo("Formulário principal configurado", "MainForm.ConfigurarFormulario")
 
+            ' Criar botão de testes programaticamente
+            CriarBotaoTestes()
+
+            LogErros.RegistrarInfo("Formulário principal configurado", "MainForm.ConfigurarFormulario")
+
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.ConfigurarFormulario")
+        End Try
+    End Sub
+
+    Private Sub CriarBotaoTestes()
+        Try
+            ' Criar o botão
+            btnTestes = New Button()
+
+            ' Configurar propriedades
+            With btnTestes
+                .Name = "btnTestes"
+                .Text = "🧪 Testes"
+                .Size = New Size(100, 40)
+                .Location = New Point(430, 10)
+                .BackColor = Color.Transparent
+                .FlatStyle = FlatStyle.Flat
+                .Font = New Font("Segoe UI", 10.0!, FontStyle.Bold)
+                .TabIndex = 3
+                .UseVisualStyleBackColor = False
+                .Visible = False ' Oculto por padrão
+
+                ' Configurar aparência do botão flat
+                With .FlatAppearance
+                    .BorderSize = 0
+                End With
+            End With
+
+            ' Adicionar ao painel de menu
+            If pnlMenu IsNot Nothing Then
+                pnlMenu.Controls.Add(btnTestes)
+            End If
+
+            ' Adicionar o manipulador de eventos
+            AddHandler btnTestes.Click, AddressOf btnTestes_Click
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.CriarBotaoTestes")
         End Try
     End Sub
 
@@ -161,6 +204,14 @@ Public Class MainForm
                         ' Ctrl+3 - Ir para Configurações
                         If btnConfiguracoes IsNot Nothing AndAlso Not btnConfiguracoes.IsDisposed Then
                             btnConfiguracoes.PerformClick()
+                        End If
+                    Case Keys.T
+                        ' Ctrl+T - Mostrar/Ocultar botão de testes
+                        If btnTestes IsNot Nothing AndAlso Not btnTestes.IsDisposed Then
+                            btnTestes.Visible = Not btnTestes.Visible
+                            If btnTestes.Visible Then
+                                AtualizarStatus("Modo de desenvolvimento ativado")
+                            End If
                         End If
                 End Select
             End If
@@ -476,6 +527,21 @@ Public Class MainForm
         End Try
     End Function
 
+    Private Sub btnTestes_Click(sender As Object, e As EventArgs)
+        Try
+            AtualizarStatus("Abrindo módulo de testes...")
 
+            ' Mostrar interface de testes
+            Dim testForm As New TestRunnerForm()
+            testForm.ShowDialog()
+
+            AtualizarStatus("Pronto")
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.btnTestes_Click")
+            MessageBox.Show($"Erro ao abrir testes: {ex.Message}", "Erro",
+                       MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
 
 End Class
