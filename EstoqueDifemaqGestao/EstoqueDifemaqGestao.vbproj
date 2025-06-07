@@ -1,0 +1,349 @@
+﻿<Project ToolsVersion="17.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <ProjectTypeGuids>{BAA0C2D2-18E2-41B9-852F-F413020CAA33};{F184B08F-C81C-45F6-A57F-5ABD9991F28F}</ProjectTypeGuids>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <OutputType>Library</OutputType>
+    <RootNamespace>EstoqueDifemaqGestao</RootNamespace>
+    <AssemblyName>EstoqueDifemaqGestao</AssemblyName>
+    <VSTO_HostDocumentName>Tratamento dos dados.xlsx</VSTO_HostDocumentName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <DefineConstants>VSTO40,UseOfficeInterop</DefineConstants>
+    <OfficeApplication>Excel</OfficeApplication>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <BootstrapperComponentsLocation>HomeSite</BootstrapperComponentsLocation>
+    <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
+    <ProjectGuid>{7E1822CB-A3BC-29E7-E460-EC460D07C2E9}</ProjectGuid>
+  </PropertyGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include="Microsoft.VSTORuntime.4.0">
+      <Visible>False</Visible>
+      <ProductName>Microsoft Visual Studio 2010 Tools for Office Runtime %28x86 and x64%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <PropertyGroup>
+    <VSTO_EmbedTypeLibraryInAssembly>false</VSTO_EmbedTypeLibraryInAssembly>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DefineConstants>$(DefineConstants)</DefineConstants>
+    <DefineDebug>true</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DocumentationFile>EstoqueDifemaqGestao.xml</DocumentationFile>
+    <RegisterForComInterop>false</RegisterForComInterop>
+    <RemoveIntegerChecks>false</RemoveIntegerChecks>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DefineConstants>
+    </DefineConstants>
+    <DefineDebug>false</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DocumentationFile>EstoqueDifemaqGestao.xml</DocumentationFile>
+    <RegisterForComInterop>false</RegisterForComInterop>
+    <RemoveIntegerChecks>false</RemoveIntegerChecks>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+  </PropertyGroup>
+  <!--
+    This section specifies references for the project.
+  -->
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Office.Tools.v4.0.Framework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Tools.Applications.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Common, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Excel, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Office.Tools.Common.v4.0.Utilities, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Excel.v4.0.Utilities, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="stdole, Version=7.0.3300.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <Choose>
+    <When Condition="$([System.String]::Copy(&quot;;$(DefineConstants);&quot;).ToLower().Contains(';useofficeinterop;')) or $([System.String]::Copy(&quot;,$(DefineConstants),&quot;).ToLower().Contains(',useofficeinterop,'))">
+      <ItemGroup>
+        <Reference Include="Office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c">
+          <Private>False</Private>
+          <EmbedInteropTypes>true</EmbedInteropTypes>
+        </Reference>
+        <Reference Include="Microsoft.Vbe.Interop, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c">
+          <Private>False</Private>
+          <EmbedInteropTypes>true</EmbedInteropTypes>
+        </Reference>
+        <Reference Include="Microsoft.Office.Interop.Excel, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c">
+          <Private>False</Private>
+          <EmbedInteropTypes>true</EmbedInteropTypes>
+        </Reference>
+      </ItemGroup>
+    </When>
+    <Otherwise>
+      <ItemGroup>
+        <COMReference Include="Microsoft.Office.Core">
+          <Guid>{2DF8D04C-5BFA-101B-BDE5-00AA0044DE52}</Guid>
+          <VersionMajor>2</VersionMajor>
+          <VersionMinor>7</VersionMinor>
+          <Lcid>0</Lcid>
+          <WrapperTool>tlbimp</WrapperTool>
+          <Isolated>False</Isolated>
+          <EmbedInteropTypes>true</EmbedInteropTypes>
+        </COMReference>
+        <COMReference Include="VBIDE">
+          <Guid>{0002E157-0000-0000-C000-000000000046}</Guid>
+          <VersionMajor>5</VersionMajor>
+          <VersionMinor>3</VersionMinor>
+          <Lcid>0</Lcid>
+          <WrapperTool>tlbimp</WrapperTool>
+          <Isolated>False</Isolated>
+          <EmbedInteropTypes>true</EmbedInteropTypes>
+        </COMReference>
+        <COMReference Include="Microsoft.Office.Interop.Excel">
+          <Guid>{00020813-0000-0000-C000-000000000046}</Guid>
+          <VersionMajor>1</VersionMajor>
+          <VersionMinor>8</VersionMinor>
+          <Lcid>0</Lcid>
+          <WrapperTool>tlbimp</WrapperTool>
+          <Isolated>False</Isolated>
+          <EmbedInteropTypes>true</EmbedInteropTypes>
+        </COMReference>
+      </ItemGroup>
+    </Otherwise>
+  </Choose>
+  <ItemGroup>
+    <Import Include="Microsoft.VisualBasic" />
+    <Import Include="System" />
+    <Import Include="System.Collections.Generic" />
+    <Import Include="System.Data" />
+    <Import Include="System.Linq" />
+    <Import Include="System.Text" />
+    <Import Include="System.Windows.Forms" />
+    <Import Include="System.Xml.Linq" />
+    <Import Include="Microsoft.Office.Tools.Excel" />
+    <Import Include="Microsoft.VisualStudio.Tools.Applications.Runtime" />
+    <Import Include="Office = Microsoft.Office.Core" />
+    <Import Include="Excel = Microsoft.Office.Interop.Excel" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="ColumnConfig.vb" />
+    <Compile Include="ConfiguracaoApp.vb" />
+    <Compile Include="DataHelper.vb" />
+    <Compile Include="Extensions.vb" />
+    <Compile Include="LogErros.vb" />
+    <Compile Include="MainForm.Designer.vb">
+      <DependentUpon>MainForm.vb</DependentUpon>
+    </Compile>
+    <Compile Include="MainForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="My Project\AssemblyInfo.vb" />
+    <Compile Include="Planilha1.Designer.vb">
+      <DependentUpon>Planilha1.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha1.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha2.Designer.vb">
+      <DependentUpon>Planilha2.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha2.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha3.Designer.vb">
+      <DependentUpon>Planilha3.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha3.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha4.Designer.vb">
+      <DependentUpon>Planilha4.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha4.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha5.Designer.vb">
+      <DependentUpon>Planilha5.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha5.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha6.Designer.vb">
+      <DependentUpon>Planilha6.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha6.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha7.Designer.vb">
+      <DependentUpon>Planilha7.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha7.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha8.Designer.vb">
+      <DependentUpon>Planilha8.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="Planilha8.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="PowerQueryManager.vb" />
+    <Compile Include="ThisWorkbook.Designer.vb">
+      <DependentUpon>ThisWorkbook.Designer.xml</DependentUpon>
+    </Compile>
+    <Compile Include="ThisWorkbook.vb">
+      <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
+    </Compile>
+    <Compile Include="UcReposicaoEstoque.Designer.vb">
+      <DependentUpon>UcReposicaoEstoque.vb</DependentUpon>
+    </Compile>
+    <Compile Include="UcReposicaoEstoque.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <EmbeddedResource Include="My Project\Resources.resx">
+      <Generator>VbMyResourcesResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.vb</LastGenOutput>
+      <CustomToolNamespace>My.Resources</CustomToolNamespace>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <Compile Include="My Project\Resources.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <None Include="My Project\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.vb</LastGenOutput>
+    </None>
+    <Compile Include="My Project\Settings.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+    <None Include="Tratamento dos dados.xlsx" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ThisWorkbook.Designer.xml">
+      <DependentUpon>ThisWorkbook.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha1.Designer.xml">
+      <DependentUpon>Planilha1.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha2.Designer.xml">
+      <DependentUpon>Planilha2.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha3.Designer.xml">
+      <DependentUpon>Planilha3.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha4.Designer.xml">
+      <DependentUpon>Planilha4.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha5.Designer.xml">
+      <DependentUpon>Planilha5.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha6.Designer.xml">
+      <DependentUpon>Planilha6.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha7.Designer.xml">
+      <DependentUpon>Planilha7.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Planilha8.Designer.xml">
+      <DependentUpon>Planilha8.vb</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{94E38DFF-614B-4CBD-B67C-F211BB35CE8B}" />
+  </ItemGroup>
+  <PropertyGroup>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionExplicit>On</OptionExplicit>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionCompare>Binary</OptionCompare>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionStrict>Off</OptionStrict>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionInfer>On</OptionInfer>
+  </PropertyGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
+  <Import Project="$(VSToolsPath)\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="'$(VSToolsPath)' != ''" />
+  <ProjectExtensions>
+    <VisualStudio>
+      <FlavorProperties GUID="{BAA0C2D2-18E2-41B9-852F-F413020CAA33}">
+        <ProjectProperties HostName="Tratamento dos dados.xlsx" HostPackage="{3F2B7691-D1D1-402F-9370-2704A737CF60}" OfficeVersion="15.0" VstxVersion="4.0" ApplicationType="XLS" Language="VB" TemplatesPath="VSTOTemplates" DebugInfoExeName="C:\Program Files\Microsoft Office\root\Office16\excel.exe" DebugInfoCommandLine="/x &quot;[$OUTPUT]Tratamento dos dados.xlsx&quot;" />
+        <Host Name="Excel Document" Path=".\Tratamento dos dados.xlsx">
+          <HostItem Name="Planilha1" Code="Planilha1.vb" CanonicalName="Planilha1" DisplayName="EstoqueVisao" Blueprint="Planilha1.Designer.xml" GeneratedCode="Planilha1.Designer.vb" />
+          <HostItem Name="Planilha2" Code="Planilha2.vb" CanonicalName="Planilha2" DisplayName="Data últimos 2 anos" Blueprint="Planilha2.Designer.xml" GeneratedCode="Planilha2.Designer.vb" />
+          <HostItem Name="Planilha3" Code="Planilha3.vb" CanonicalName="Planilha3" DisplayName="Compras" Blueprint="Planilha3.Designer.xml" GeneratedCode="Planilha3.Designer.vb" />
+          <HostItem Name="Planilha4" Code="Planilha4.vb" CanonicalName="Planilha4" DisplayName="Vendas" Blueprint="Planilha4.Designer.xml" GeneratedCode="Planilha4.Designer.vb" />
+          <HostItem Name="Planilha5" Code="Planilha5.vb" CanonicalName="Planilha5" DisplayName="Histórico de vendas" Blueprint="Planilha5.Designer.xml" GeneratedCode="Planilha5.Designer.vb" />
+          <HostItem Name="Planilha6" Code="Planilha6.vb" CanonicalName="Planilha6" DisplayName="Histórico de compras" Blueprint="Planilha6.Designer.xml" GeneratedCode="Planilha6.Designer.vb" />
+          <HostItem Name="Planilha7" Code="Planilha7.vb" CanonicalName="Planilha7" DisplayName="Produtos" Blueprint="Planilha7.Designer.xml" GeneratedCode="Planilha7.Designer.vb" />
+          <HostItem Name="Planilha8" Code="Planilha8.vb" CanonicalName="Planilha8" DisplayName="ProdutosManual" Blueprint="Planilha8.Designer.xml" GeneratedCode="Planilha8.Designer.vb" />
+          <HostItem Name="ThisWorkbook" Code="ThisWorkbook.vb" CanonicalName="ThisWorkbook" Blueprint="ThisWorkbook.Designer.xml" GeneratedCode="ThisWorkbook.Designer.vb" />
+        </Host>
+      </FlavorProperties>
+    </VisualStudio>
+  </ProjectExtensions>
+  <!--
+    To modify your build process, add your task inside one of the targets below and uncomment it.
+    Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
