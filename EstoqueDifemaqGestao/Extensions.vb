@@ -82,7 +82,7 @@ Public Module Extensions
                         .HeaderText = config.HeaderText
                         .Width = config.Width
                         .Visible = config.Visible
-                        .ReadOnly = config.ReadOnly
+                        .ReadOnly = config.IsReadOnly  ' Corrigido: usando IsReadOnly
 
                         ' Configurar alinhamento
                         If config.Alignment.HasValue Then
@@ -165,15 +165,15 @@ Public Module Extensions
                 Throw New InvalidOperationException("DataGridView não possui dados para exportar")
             End If
 
-            Using writer As New IO.StreamWriter(caminhoArquivo, False, System.Text.Encoding.UTF8)
+            Using writer As New System.IO.StreamWriter(caminhoArquivo, False, System.Text.Encoding.UTF8)
                 ' Escrever cabeçalhos
                 Dim headers As New List(Of String)
                 For Each column As DataGridViewColumn In dgv.Columns
                     If column.Visible Then
-                        headers.Add($"""{column.HeaderText}""")
+                        headers.Add(String.Format("""{0}""", column.HeaderText))
                     End If
                 Next
-                writer.WriteLine(String.Join(",", headers))
+                writer.WriteLine(String.Join(",", headers.ToArray()))
 
                 ' Escrever dados
                 For Each row As DataGridViewRow In dgv.Rows
@@ -181,20 +181,20 @@ Public Module Extensions
                         Dim values As New List(Of String)
                         For Each column As DataGridViewColumn In dgv.Columns
                             If column.Visible Then
-                                Dim valor As String = row.Cells(column.Index).Value?.ToString() ?? ""
-                                values.Add($"""{valor.Replace("""", """""")}""")
+                                Dim valor As String = If(row.Cells(column.Index).Value IsNot Nothing, row.Cells(column.Index).Value.ToString(), "")
+                                values.Add(String.Format("""{0}""", valor.Replace("""", """""")))
                             End If
                         Next
-                        writer.WriteLine(String.Join(",", values))
+                        writer.WriteLine(String.Join(",", values.ToArray()))
                     End If
                 Next
             End Using
 
-            LogErros.RegistrarInfo($"Dados exportados para: {caminhoArquivo}", "Extensions.ExportarParaCSV")
+            LogErros.RegistrarInfo(String.Format("Dados exportados para: {0}", caminhoArquivo), "Extensions.ExportarParaCSV")
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "Extensions.ExportarParaCSV")
-            Throw New Exception($"Erro ao exportar dados: {ex.Message}")
+            Throw New Exception(String.Format("Erro ao exportar dados: {0}", ex.Message))
         End Try
     End Sub
 
@@ -224,19 +224,19 @@ Public Module Extensions
     <Extension()>
     Public Sub AplicarFiltroRapido(dgv As DataGridView, filtro As String, colunaIndex As Integer)
         Try
-            If dgv.DataSource Is Nothing OrElse TypeOf dgv.DataSource IsNot DataTable Then
+            If dgv.DataSource Is Nothing OrElse TypeOf dgv.DataSource IsNot System.Data.DataTable Then
                 Return
             End If
 
-            Dim dataTable As DataTable = CType(dgv.DataSource, DataTable)
-            Dim dataView As DataView = dataTable.DefaultView
+            Dim dataTable As System.Data.DataTable = CType(dgv.DataSource, System.Data.DataTable)
+            Dim dataView As System.Data.DataView = dataTable.DefaultView
 
             If String.IsNullOrEmpty(filtro) Then
                 dataView.RowFilter = ""
             Else
                 If colunaIndex >= 0 AndAlso colunaIndex < dataTable.Columns.Count Then
                     Dim nomeColuna As String = dataTable.Columns(colunaIndex).ColumnName
-                    dataView.RowFilter = $"[{nomeColuna}] LIKE '%{filtro.Replace("'", "''")}%'"
+                    dataView.RowFilter = String.Format("[{0}] LIKE '%{1}%'", nomeColuna, filtro.Replace("'", "''"))
                 End If
             End If
 

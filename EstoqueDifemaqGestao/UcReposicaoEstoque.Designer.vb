@@ -2,21 +2,12 @@
 Partial Class UcReposicaoEstoque
     Inherits System.Windows.Forms.UserControl
 
-    'UserControl substitui o descarte para limpar a lista de componentes.
-    <System.Diagnostics.DebuggerNonUserCode()>
-    Protected Overrides Sub Dispose(ByVal disposing As Boolean)
-        Try
-            If disposing AndAlso components IsNot Nothing Then
-                components.Dispose()
-            End If
-        Finally
-            MyBase.Dispose(disposing)
-        End Try
-    End Sub
-
     'Exigido pelo Windows Form Designer
     Private components As System.ComponentModel.IContainer
 
+    'NOTA: O procedimento a seguir é exigido pelo Windows Form Designer
+    'Pode ser modificado usando o Windows Form Designer.  
+    'Não o modifique usando o editor de códigos.
     <System.Diagnostics.DebuggerStepThrough()>
     Private Sub InitializeComponent()
         Me.pnlPrincipal = New System.Windows.Forms.Panel()

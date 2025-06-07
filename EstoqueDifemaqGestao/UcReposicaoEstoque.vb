@@ -65,14 +65,46 @@ Public Class UcReposicaoEstoque
     End Sub
 
     Private Sub ConfigurarFiltros()
-        ' Configuração básica do filtro - PlaceholderText não disponível em versões antigas
+        ' Configuração básica do filtro
         txtFiltro.Text = ""
         txtFiltro.ForeColor = Color.Black
     End Sub
 
     Private Sub InicializarDados()
         Try
-            powerQueryManager = New PowerQueryManager(CType(Globals.ThisWorkbook, Microsoft.Office.Interop.Excel.Workbook))
+            ' Obter a instância correta do Workbook usando o método seguro
+            Dim workbookObj As Microsoft.Office.Interop.Excel.Workbook = Nothing
+
+            Try
+                ' Tentar obter através do método público primeiro
+                If TypeOf Globals.ThisWorkbook Is ThisWorkbook Then
+                    Dim thisWb As ThisWorkbook = CType(Globals.ThisWorkbook, ThisWorkbook)
+                    workbookObj = thisWb.ObterWorkbook()
+                End If
+
+                ' Se ainda não conseguiu, tentar através da aplicação
+                If workbookObj Is Nothing Then
+                    Dim excelApp As Microsoft.Office.Interop.Excel.Application = CType(Globals.ThisWorkbook.Application, Microsoft.Office.Interop.Excel.Application)
+                    workbookObj = excelApp.ActiveWorkbook
+                End If
+
+                ' Último recurso: tentar casting direto
+                If workbookObj Is Nothing Then
+                    workbookObj = CType(Globals.ThisWorkbook.InnerObject, Microsoft.Office.Interop.Excel.Workbook)
+                End If
+
+            Catch castEx As Exception
+                LogErros.RegistrarErro(castEx, "UcReposicaoEstoque.InicializarDados - Erro no casting do Workbook")
+                MessageBox.Show("Erro ao acessar o workbook do Excel. Verifique se o Excel está funcionando corretamente.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                Return
+            End Try
+
+            If workbookObj Is Nothing Then
+                MessageBox.Show("Não foi possível acessar o workbook do Excel.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                Return
+            End If
+
+            powerQueryManager = New PowerQueryManager(workbookObj)
 
             ' Mostrar cursor de espera
             Me.Cursor = Cursors.WaitCursor
@@ -115,8 +147,10 @@ Public Class UcReposicaoEstoque
 
     Private Sub AtualizarDadosPowerQuery()
         Try
-            powerQueryManager.AtualizarTodasConsultas()
-            LogErros.RegistrarInfo("Power Query atualizado com sucesso", "UcReposicaoEstoque.AtualizarDadosPowerQuery")
+            If powerQueryManager IsNot Nothing Then
+                powerQueryManager.AtualizarTodasConsultas()
+                LogErros.RegistrarInfo("Power Query atualizado com sucesso", "UcReposicaoEstoque.AtualizarDadosPowerQuery")
+            End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.AtualizarDadosPowerQuery")
@@ -136,6 +170,11 @@ Public Class UcReposicaoEstoque
 
     Private Sub CarregarProdutos()
         Try
+            If powerQueryManager Is Nothing Then
+                MessageBox.Show("PowerQueryManager não está inicializado.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                Return
+            End If
+
             Dim tabelaProdutos As ListObject = powerQueryManager.ObterTabela(ConfiguracaoApp.TABELA_PRODUTOS)
             If tabelaProdutos Is Nothing Then
                 MessageBox.Show(String.Format("Tabela '{0}' não encontrada!", ConfiguracaoApp.TABELA_PRODUTOS), "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -163,12 +202,16 @@ Public Class UcReposicaoEstoque
     End Sub
 
     Private Sub TxtFiltro_TextChanged(sender As Object, e As EventArgs)
-        filtroTimer.Stop()
-        filtroTimer.Start()
+        If filtroTimer IsNot Nothing Then
+            filtroTimer.Stop()
+            filtroTimer.Start()
+        End If
     End Sub
 
     Private Sub FiltroTimer_Tick(sender As Object, e As EventArgs)
-        filtroTimer.Stop()
+        If filtroTimer IsNot Nothing Then
+            filtroTimer.Stop()
+        End If
         filtroAtual = txtFiltro.Text.Trim()
         AplicarFiltro()
     End Sub
@@ -251,8 +294,10 @@ Public Class UcReposicaoEstoque
     Private Sub DgvProdutos_SelectionChanged(sender As Object, e As EventArgs)
         Try
             ' Usar debounce para evitar múltiplas chamadas
-            debounceTimer.Stop()
-            debounceTimer.Start()
+            If debounceTimer IsNot Nothing Then
+                debounceTimer.Stop()
+                debounceTimer.Start()
+            End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.DgvProdutos_SelectionChanged")
@@ -261,7 +306,9 @@ Public Class UcReposicaoEstoque
 
     Private Sub DebounceTimer_Tick(sender As Object, e As EventArgs)
         Try
-            debounceTimer.Stop()
+            If debounceTimer IsNot Nothing Then
+                debounceTimer.Stop()
+            End If
 
             If dgvProdutos.SelectedRows.Count > 0 Then
                 Dim produtoSelecionadoRow As DataGridViewRow = dgvProdutos.SelectedRows(0)
@@ -452,6 +499,10 @@ Public Class UcReposicaoEstoque
 
     Private Function CarregarDadosFiltrados(nomeTabela As String, codigoProduto As String) As System.Data.DataTable
         Try
+            If powerQueryManager Is Nothing Then
+                Return New System.Data.DataTable()
+            End If
+
             Dim tabela As ListObject = powerQueryManager.ObterTabela(nomeTabela)
             If tabela Is Nothing Then Return New System.Data.DataTable()
 
@@ -561,11 +612,13 @@ Public Class UcReposicaoEstoque
                 If debounceTimer IsNot Nothing Then
                     debounceTimer.Stop()
                     debounceTimer.Dispose()
+                    debounceTimer = Nothing
                 End If
 
                 If filtroTimer IsNot Nothing Then
                     filtroTimer.Stop()
                     filtroTimer.Dispose()
+                    filtroTimer = Nothing
                 End If
 
                 ' Limpar imagem
@@ -576,6 +629,7 @@ Public Class UcReposicaoEstoque
                 ' Limpar referências
                 If dadosProdutosOriginais IsNot Nothing Then
                     dadosProdutosOriginais.Dispose()
+                    dadosProdutosOriginais = Nothing
                 End If
 
                 powerQueryManager = Nothing

@@ -6,6 +6,7 @@ Public Class MainForm
     Private timerStatusBar As Timer
     Private moduloAtual As String = ""
     Private isClosingControlled As Boolean = False
+    Private isDisposing As Boolean = False
 
     Public Sub New()
         InitializeComponent()
@@ -26,14 +27,6 @@ Public Class MainForm
             ' Configurações de exibição
             Me.ShowInTaskbar = True
             Me.KeyPreview = True
-
-            ' Configurar ícone se disponível - removido para evitar erro
-            Try
-                ' Me.Icon = My.Resources.AppIcon - comentado pois não existe
-            Catch
-                ' Ícone não encontrado, continuar sem
-                LogErros.RegistrarInfo("Ícone da aplicação não encontrado", "MainForm.ConfigurarFormulario")
-            End Try
 
             ' Configurar evento de teclas para atalhos
             AddHandler Me.KeyDown, AddressOf MainForm_KeyDown
@@ -76,6 +69,9 @@ Public Class MainForm
 
     Public Sub CarregarUserControl(tipoUserControl As Type)
         Try
+            ' Verificar se está em processo de fechamento
+            If isDisposing OrElse Me.IsDisposed Then Return
+
             ' Mostrar indicador de carregamento
             AtualizarStatus("Carregando módulo...")
             Me.Cursor = Cursors.WaitCursor
@@ -116,6 +112,9 @@ Public Class MainForm
 
     Private Sub LimparPainelConteudo()
         Try
+            ' Verificar se o painel ainda existe
+            If pnlConteudo Is Nothing OrElse pnlConteudo.IsDisposed Then Return
+
             ' Limpar controles existentes
             For Each control As Control In pnlConteudo.Controls.Cast(Of Control).ToArray()
                 If TypeOf control Is UserControl Then
@@ -134,27 +133,35 @@ Public Class MainForm
 
     Private Sub MainForm_KeyDown(sender As Object, e As KeyEventArgs)
         Try
+            ' Verificar se está em processo de fechamento
+            If isDisposing OrElse Me.IsDisposed Then Return
+
             ' Atalhos de teclado
             If e.Control Then
                 Select Case e.KeyCode
                     Case Keys.F5
                         ' Ctrl+F5 - Atualizar dados
                         If ucReposicaoEstoque IsNot Nothing Then
-                            ' Simular clique no botão atualizar se existir
                             AtualizarStatus("Atualizando dados via atalho...")
                         End If
                     Case Keys.Q
                         ' Ctrl+Q - Fechar aplicação
-                        Me.Close()
+                        FecharAplicacaoSegura()
                     Case Keys.D1
                         ' Ctrl+1 - Ir para Reposição de Estoque
-                        btnReposicaoEstoque.PerformClick()
+                        If btnReposicaoEstoque IsNot Nothing AndAlso Not btnReposicaoEstoque.IsDisposed Then
+                            btnReposicaoEstoque.PerformClick()
+                        End If
                     Case Keys.D2
                         ' Ctrl+2 - Ir para Relatórios
-                        btnRelatorios.PerformClick()
+                        If btnRelatorios IsNot Nothing AndAlso Not btnRelatorios.IsDisposed Then
+                            btnRelatorios.PerformClick()
+                        End If
                     Case Keys.D3
                         ' Ctrl+3 - Ir para Configurações
-                        btnConfiguracoes.PerformClick()
+                        If btnConfiguracoes IsNot Nothing AndAlso Not btnConfiguracoes.IsDisposed Then
+                            btnConfiguracoes.PerformClick()
+                        End If
                 End Select
             End If
 
@@ -181,6 +188,9 @@ Public Class MainForm
 
     Private Sub MainForm_FormClosing(sender As Object, e As FormClosingEventArgs) Handles Me.FormClosing
         Try
+            ' Marcar que está em processo de fechamento
+            isDisposing = True
+
             If Not isClosingControlled Then
                 ' Confirmar fechamento apenas se não foi controlado
                 Dim resultado As DialogResult = MessageBox.Show(
@@ -191,6 +201,7 @@ Public Class MainForm
                     MessageBoxDefaultButton.Button2)
 
                 If resultado = DialogResult.No Then
+                    isDisposing = False ' Cancelar processo de fechamento
                     e.Cancel = True
                     Return
                 End If
@@ -202,7 +213,10 @@ Public Class MainForm
             ' Fechar workbook Excel de forma controlada
             Try
                 If Globals.ThisWorkbook IsNot Nothing Then
-                    CType(Globals.ThisWorkbook, ThisWorkbook).FecharAplicacao()
+                    Dim thisWb As ThisWorkbook = CType(Globals.ThisWorkbook, ThisWorkbook)
+                    If thisWb IsNot Nothing Then
+                        thisWb.FecharAplicacao()
+                    End If
                 End If
             Catch ex As Exception
                 LogErros.RegistrarErro(ex, "MainForm.MainForm_FormClosing - Erro ao fechar workbook")
@@ -215,8 +229,23 @@ Public Class MainForm
 
     Public Sub FecharControlado()
         ' Método para fechar o formulário sem confirmação
-        isClosingControlled = True
-        Me.Close()
+        Try
+            isClosingControlled = True
+            isDisposing = True
+            Me.Close()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.FecharControlado")
+        End Try
+    End Sub
+
+    Private Sub FecharAplicacaoSegura()
+        Try
+            isClosingControlled = True
+            isDisposing = True
+            Me.Close()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.FecharAplicacaoSegura")
+        End Try
     End Sub
 
     Private Sub LimparRecursos()
@@ -242,7 +271,13 @@ Public Class MainForm
 
     Private Sub TimerStatusBar_Tick(sender As Object, e As EventArgs)
         Try
-            lblDataHora.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+            ' Verificar se está em processo de fechamento
+            If isDisposing OrElse Me.IsDisposed Then Return
+
+            ' Verificar se o label ainda existe
+            If lblDataHora IsNot Nothing AndAlso Not lblDataHora.IsDisposed Then
+                lblDataHora.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+            End If
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.TimerStatusBar_Tick")
         End Try
@@ -250,8 +285,18 @@ Public Class MainForm
 
     Public Sub AtualizarStatus(mensagem As String)
         Try
-            lblStatus.Text = mensagem
-            StatusStrip.Refresh()
+            ' Verificar se está em processo de fechamento
+            If isDisposing OrElse Me.IsDisposed Then Return
+
+            ' Verificar se os controles ainda existem
+            If lblStatus IsNot Nothing AndAlso Not lblStatus.IsDisposed Then
+                lblStatus.Text = mensagem
+            End If
+
+            If StatusStrip IsNot Nothing AndAlso Not StatusStrip.IsDisposed Then
+                StatusStrip.Refresh()
+            End If
+
             System.Windows.Forms.Application.DoEvents()
 
             LogErros.RegistrarInfo(String.Format("Status atualizado: {0}", mensagem), "MainForm.AtualizarStatus")
@@ -263,6 +308,8 @@ Public Class MainForm
 
     Private Sub btnReposicaoEstoque_Click(sender As Object, e As EventArgs) Handles btnReposicaoEstoque.Click
         Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+
             If moduloAtual <> "Reposição de Estoque" Then
                 AtualizarStatus("Carregando Reposição de Estoque...")
                 HighlightButtonMenu(btnReposicaoEstoque)
@@ -278,6 +325,8 @@ Public Class MainForm
 
     Private Sub btnRelatorios_Click(sender As Object, e As EventArgs) Handles btnRelatorios.Click
         Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+
             AtualizarStatus("Módulo de Relatórios em desenvolvimento...")
             HighlightButtonMenu(btnRelatorios)
 
@@ -298,6 +347,8 @@ Public Class MainForm
 
     Private Sub btnConfiguracoes_Click(sender As Object, e As EventArgs) Handles btnConfiguracoes.Click
         Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+
             AtualizarStatus("Módulo de Configurações em desenvolvimento...")
             HighlightButtonMenu(btnConfiguracoes)
 
@@ -318,19 +369,24 @@ Public Class MainForm
 
     Private Sub HighlightButtonMenu(botaoAtivo As Button)
         Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+            If pnlMenu Is Nothing OrElse pnlMenu.IsDisposed Then Return
+
             ' Resetar cores de todos os botões
             For Each control As Control In pnlMenu.Controls
-                If TypeOf control Is Button AndAlso control IsNot botaoAtivo Then
+                If TypeOf control Is Button AndAlso control IsNot botaoAtivo AndAlso Not control.IsDisposed Then
                     control.BackColor = Color.Transparent
                     control.ForeColor = Color.Black
                 End If
             Next
 
             ' Destacar botão ativo
-            With botaoAtivo
-                .BackColor = ConfiguracaoApp.ObterCorHeader()
-                .ForeColor = Color.White
-            End With
+            If botaoAtivo IsNot Nothing AndAlso Not botaoAtivo.IsDisposed Then
+                With botaoAtivo
+                    .BackColor = ConfiguracaoApp.ObterCorHeader()
+                    .ForeColor = Color.White
+                End With
+            End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.HighlightButtonMenu")
@@ -339,6 +395,8 @@ Public Class MainForm
 
     Private Sub btnMinimizar_Click(sender As Object, e As EventArgs) Handles btnMinimizar.Click
         Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+
             Me.WindowState = FormWindowState.Minimized
             LogErros.RegistrarInfo("Janela minimizada", "MainForm.btnMinimizar_Click")
         Catch ex As Exception
@@ -348,6 +406,9 @@ Public Class MainForm
 
     Private Sub btnMaximizar_Click(sender As Object, e As EventArgs) Handles btnMaximizar.Click
         Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+            If btnMaximizar Is Nothing OrElse btnMaximizar.IsDisposed Then Return
+
             If Me.WindowState = FormWindowState.Maximized Then
                 Me.WindowState = FormWindowState.Normal
                 btnMaximizar.Text = "□"
@@ -364,7 +425,7 @@ Public Class MainForm
 
     Private Sub btnFechar_Click(sender As Object, e As EventArgs) Handles btnFechar.Click
         Try
-            Me.Close()
+            FecharAplicacaoSegura()
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.btnFechar_Click")
         End Try

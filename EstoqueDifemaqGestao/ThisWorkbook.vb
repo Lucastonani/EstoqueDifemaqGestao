@@ -6,6 +6,7 @@ Public Class ThisWorkbook
     Private originalWindowState As Microsoft.Office.Interop.Excel.XlWindowState
     Private originalVisible As Boolean
     Private isShuttingDown As Boolean = False
+    Private isInitialized As Boolean = False
 
     Private Sub ThisWorkbook_Startup() Handles Me.Startup
         Try
@@ -26,6 +27,7 @@ Public Class ThisWorkbook
             ' Criar e exibir o formulário principal
             InicializarFormularioPrincipal()
 
+            isInitialized = True
             LogErros.RegistrarInfo("Aplicação iniciada com sucesso", "ThisWorkbook.ThisWorkbook_Startup")
 
         Catch ex As Exception
@@ -55,7 +57,15 @@ Public Class ThisWorkbook
 
     Private Sub VerificarPreRequisitos()
         Try
-            Dim powerQueryManager As New PowerQueryManager(CType(Me, Microsoft.Office.Interop.Excel.Workbook))
+            ' Usar a interface Workbook em vez de casting direto
+            Dim workbookInterface As Microsoft.Office.Interop.Excel.Workbook = ObterWorkbook()
+            If workbookInterface Is Nothing Then
+                LogErros.RegistrarInfo("Não foi possível obter interface do workbook", "ThisWorkbook.VerificarPreRequisitos")
+                Return
+            End If
+
+            Dim powerQueryManager As New PowerQueryManager(workbookInterface)
+
             Dim tabelasNecessarias As String() = {
                 ConfiguracaoApp.TABELA_PRODUTOS,
                 ConfiguracaoApp.TABELA_ESTOQUE,
@@ -209,7 +219,10 @@ Public Class ThisWorkbook
 
     Private Sub appEvents_WorkbookBeforeClose(Wb As Microsoft.Office.Interop.Excel.Workbook, ByRef Cancel As Boolean) Handles appEvents.WorkbookBeforeClose
         Try
-            If Wb Is CType(Me, Microsoft.Office.Interop.Excel.Workbook) AndAlso Not isShuttingDown Then
+            ' Comparar usando InnerObject para evitar problemas de casting
+            Dim thisWorkbookInterface As Microsoft.Office.Interop.Excel.Workbook = ObterWorkbook()
+
+            If thisWorkbookInterface IsNot Nothing AndAlso Wb Is thisWorkbookInterface AndAlso Not isShuttingDown Then
                 LogErros.RegistrarInfo("Evento WorkbookBeforeClose disparado", "ThisWorkbook.appEvents_WorkbookBeforeClose")
 
                 ' Fechar aplicação quando workbook for fechado
@@ -228,7 +241,9 @@ Public Class ThisWorkbook
 
     Private Sub appEvents_WorkbookBeforeSave(Wb As Microsoft.Office.Interop.Excel.Workbook, SaveAsUI As Boolean, ByRef Cancel As Boolean) Handles appEvents.WorkbookBeforeSave
         Try
-            If Wb Is CType(Me, Microsoft.Office.Interop.Excel.Workbook) Then
+            Dim thisWorkbookInterface As Microsoft.Office.Interop.Excel.Workbook = ObterWorkbook()
+
+            If thisWorkbookInterface IsNot Nothing AndAlso Wb Is thisWorkbookInterface Then
                 ' Permitir salvamento automático, mas logar a ação
                 LogErros.RegistrarInfo(String.Format("Workbook sendo salvo (SaveAsUI: {0})", SaveAsUI), "ThisWorkbook.appEvents_WorkbookBeforeSave")
             End If
@@ -239,7 +254,9 @@ Public Class ThisWorkbook
 
     Private Sub appEvents_WorkbookOpen(Wb As Microsoft.Office.Interop.Excel.Workbook) Handles appEvents.WorkbookOpen
         Try
-            If Wb IsNot CType(Me, Microsoft.Office.Interop.Excel.Workbook) Then
+            Dim thisWorkbookInterface As Microsoft.Office.Interop.Excel.Workbook = ObterWorkbook()
+
+            If thisWorkbookInterface IsNot Nothing AndAlso Wb IsNot thisWorkbookInterface Then
                 LogErros.RegistrarInfo(String.Format("Outro workbook foi aberto: {0}", Wb.Name), "ThisWorkbook.appEvents_WorkbookOpen")
             End If
         Catch ex As Exception
@@ -262,8 +279,11 @@ Public Class ThisWorkbook
             LogErros.RegistrarInfo("Fechamento controlado da aplicação solicitado", "ThisWorkbook.FecharAplicacao")
             isShuttingDown = True
 
-            ' Fechar o workbook (que vai disparar o shutdown)
-            CType(Me, Microsoft.Office.Interop.Excel.Workbook).Close(False)
+            ' Fechar o workbook usando InnerObject
+            Dim thisWorkbookInterface As Microsoft.Office.Interop.Excel.Workbook = ObterWorkbook()
+            If thisWorkbookInterface IsNot Nothing Then
+                thisWorkbookInterface.Close(False)
+            End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "ThisWorkbook.FecharAplicacao")
@@ -283,5 +303,51 @@ Public Class ThisWorkbook
             Return mainForm IsNot Nothing AndAlso Not mainForm.IsDisposed AndAlso mainForm.Visible
         End Get
     End Property
+
+    ' Propriedade para verificar se foi inicializado
+    Public ReadOnly Property EstaInicializado As Boolean
+        Get
+            Return isInitialized AndAlso Not isShuttingDown
+        End Get
+    End Property
+
+    ' Método público para obter a interface Workbook corretamente
+    Public Function ObterWorkbook() As Microsoft.Office.Interop.Excel.Workbook
+        Try
+            ' Tentar múltiplas formas de obter o workbook
+            Dim workbook As Microsoft.Office.Interop.Excel.Workbook = Nothing
+
+            ' 1ª tentativa: DirectCast com InnerObject
+            Try
+                workbook = DirectCast(Me.InnerObject, Microsoft.Office.Interop.Excel.Workbook)
+                If workbook IsNot Nothing Then Return workbook
+            Catch
+                ' Continuar para próxima tentativa
+            End Try
+
+            ' 2ª tentativa: Através da aplicação
+            Try
+                If Me.Application IsNot Nothing Then
+                    workbook = Me.Application.ActiveWorkbook
+                    If workbook IsNot Nothing Then Return workbook
+                End If
+            Catch
+                ' Continuar para próxima tentativa
+            End Try
+
+            ' 3ª tentativa: Tentar cast direto (pode falhar)
+            Try
+                workbook = CType(Me, Microsoft.Office.Interop.Excel.Workbook)
+            Catch
+                ' Última tentativa falhou
+            End Try
+
+            Return workbook
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "ThisWorkbook.ObterWorkbook")
+            Return Nothing
+        End Try
+    End Function
 
 End Class

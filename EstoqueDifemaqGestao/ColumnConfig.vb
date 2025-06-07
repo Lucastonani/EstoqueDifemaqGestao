@@ -3,7 +3,7 @@
     Public Property HeaderText As String
     Public Property Width As Integer
     Public Property Visible As Boolean = True
-    Public Property ReadOnly As Boolean = True
+    Public Property IsReadOnly As Boolean = True  ' Mudança de ReadOnly para IsReadOnly
     Public Property Alignment As DataGridViewContentAlignment?
     Public Property Format As String
     Public Property MinimumWidth As Integer?
