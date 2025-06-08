@@ -6,6 +6,24 @@ Imports System.Windows.Forms
 
 Public Class TestRunner
 
+    ' Executar todos os testes de uma vez
+    Public Shared Sub RunAllTestSuites()
+        Console.WriteLine("=== EXECUTANDO TODOS OS TESTES ===")
+        Console.WriteLine()
+
+        ' Testes unitários
+        UnitTests.RunAllTests()
+
+        ' Testes de integração
+        IntegrationTests.RunIntegrationTests()
+
+        ' Testes de performance
+        PerformanceTests.RunPerformanceTests()
+
+        ' Checklist de deployment
+        DeploymentChecklist.RunAllChecks()
+    End Sub
+
     ' Executar testes em modo console
     Public Shared Sub RunConsoleTests()
         Console.WriteLine("=== EXECUTANDO TESTES DO SISTEMA ===")
@@ -54,15 +72,26 @@ Public Class TestRunnerForm
         Me.Size = New Size(800, 600)
         Me.StartPosition = FormStartPosition.CenterScreen
 
-        ' Botão executar
+        ' Botão executar testes unitários
         btnRunTests = New Button()
-        btnRunTests.Text = "Executar Todos os Testes"
+        btnRunTests.Text = "Executar Testes Unitários"
         btnRunTests.Location = New Point(10, 10)
-        btnRunTests.Size = New Size(200, 30)
+        btnRunTests.Size = New Size(180, 30)
         btnRunTests.BackColor = Color.FromArgb(46, 134, 171)
         btnRunTests.ForeColor = Color.White
         btnRunTests.FlatStyle = FlatStyle.Flat
         btnRunTests.Font = New Font("Segoe UI", 10, FontStyle.Bold)
+
+        ' Botão executar todos os testes
+        Dim btnRunAllTests As New Button()
+        btnRunAllTests.Text = "Executar TODOS os Testes"
+        btnRunAllTests.Location = New Point(200, 10)
+        btnRunAllTests.Size = New Size(180, 30)
+        btnRunAllTests.BackColor = Color.FromArgb(139, 69, 19)
+        btnRunAllTests.ForeColor = Color.White
+        btnRunAllTests.FlatStyle = FlatStyle.Flat
+        btnRunAllTests.Font = New Font("Segoe UI", 10, FontStyle.Bold)
+        AddHandler btnRunAllTests.Click, AddressOf btnRunAllTests_Click
 
         ' Label status
         lblStatus = New Label()
@@ -90,7 +119,7 @@ Public Class TestRunnerForm
         txtResults.ReadOnly = True
 
         ' Adicionar controles
-        Me.Controls.AddRange({btnRunTests, lblStatus, progressBar, txtResults})
+        Me.Controls.AddRange({btnRunTests, btnRunAllTests, lblStatus, progressBar, txtResults})
     End Sub
 
     Private Sub btnRunTests_Click(sender As Object, e As EventArgs) Handles btnRunTests.Click
@@ -126,6 +155,51 @@ Public Class TestRunnerForm
                                   lblStatus.Text = "Erro durante execução!"
                                   progressBar.Visible = False
                                   btnRunTests.Enabled = True
+                              End Sub)
+                End Try
+
+                ' Restaurar console
+                Console.SetOut(Console.Out)
+            End Sub
+        )
+
+        testThread.Start()
+    End Sub
+
+    Private Sub btnRunAllTests_Click(sender As Object, e As EventArgs)
+        Dim btn As Button = CType(sender, Button)
+        btn.Enabled = False
+        progressBar.Visible = True
+        lblStatus.Text = "Executando TODOS os testes..."
+        txtResults.Clear()
+
+        ' Redirecionar console output
+        Dim sw As New System.IO.StringWriter()
+        Console.SetOut(sw)
+
+        ' Executar em thread separada
+        Dim testThread As New Threading.Thread(
+            Sub()
+                Try
+                    TestRunner.RunAllTestSuites()
+
+                    Me.Invoke(Sub()
+                                  txtResults.Text = sw.ToString()
+                                  lblStatus.Text = "Todos os testes concluídos!"
+                                  progressBar.Visible = False
+                                  btn.Enabled = True
+
+                                  ' Rolar para o final
+                                  txtResults.SelectionStart = txtResults.Text.Length
+                                  txtResults.ScrollToCaret()
+                              End Sub)
+
+                Catch ex As Exception
+                    Me.Invoke(Sub()
+                                  txtResults.Text = $"ERRO: {ex.Message}{Environment.NewLine}{ex.StackTrace}"
+                                  lblStatus.Text = "Erro durante execução!"
+                                  progressBar.Visible = False
+                                  btn.Enabled = True
                               End Sub)
                 End Try
 

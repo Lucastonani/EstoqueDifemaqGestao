@@ -17,6 +17,9 @@ Public Class UcReposicaoEstoque
         InitializeComponent()
         ConfigurarComponentes()
         InicializarDados()
+
+        ' Adicione esta linha para debug:
+        VerificarEstruturaDados()
     End Sub
 
     Private Sub ConfigurarComponentes()
@@ -46,22 +49,15 @@ Public Class UcReposicaoEstoque
     End Sub
 
     Private Sub ConfigurarTimers()
-        ' Timer para debounce da seleção de produtos
+        ' Timer para debounce da seleção de produtos - reduzir delay
         debounceTimer = New Timer()
-        debounceTimer.Interval = ConfiguracaoApp.DEBOUNCE_DELAY
+        debounceTimer.Interval = 150 ' Reduzido de 300ms para 150ms
         AddHandler debounceTimer.Tick, AddressOf DebounceTimer_Tick
 
         ' Timer para filtro de produtos
         filtroTimer = New Timer()
-        filtroTimer.Interval = 500 ' 500ms para filtro
+        filtroTimer.Interval = 300 ' Reduzido de 500ms
         AddHandler filtroTimer.Tick, AddressOf FiltroTimer_Tick
-    End Sub
-
-    Private Sub ConfigurarEventos()
-        AddHandler dgvProdutos.SelectionChanged, AddressOf DgvProdutos_SelectionChanged
-        AddHandler dgvProdutos.CellDoubleClick, AddressOf DgvProdutos_CellDoubleClick
-        AddHandler txtFiltro.TextChanged, AddressOf TxtFiltro_TextChanged
-        AddHandler btnAtualizar.Click, AddressOf BtnAtualizar_Click
     End Sub
 
     Private Sub ConfigurarFiltros()
@@ -175,29 +171,124 @@ Public Class UcReposicaoEstoque
                 Return
             End If
 
+            ' Mostrar cursor de espera
+            Me.Cursor = Cursors.WaitCursor
+
             Dim tabelaProdutos As ListObject = powerQueryManager.ObterTabela(ConfiguracaoApp.TABELA_PRODUTOS)
             If tabelaProdutos Is Nothing Then
-                MessageBox.Show(String.Format("Tabela '{0}' não encontrada!", ConfiguracaoApp.TABELA_PRODUTOS), "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                MessageBox.Show($"Tabela '{ConfiguracaoApp.TABELA_PRODUTOS}' não encontrada!", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Me.Cursor = Cursors.Default
                 Return
             End If
 
-            ' Converter para DataTable e armazenar cópia original
-            dadosProdutosOriginais = DataHelper.ConvertListObjectToDataTable(tabelaProdutos)
+            ' Suspender atualizações visuais para melhor performance
+            dgvProdutos.SuspendLayout()
 
-            ' Aplicar filtro se existir
-            AplicarFiltro()
+            Try
+                ' Converter para DataTable e armazenar cópia original
+                dadosProdutosOriginais = DataHelper.ConvertListObjectToDataTable(tabelaProdutos)
 
-            ' Configurar colunas
-            ConfigurarColunasProdutos()
+                ' Aplicar filtro se existir
+                AplicarFiltro()
 
-            ' Selecionar primeiro produto se existir
-            If dgvProdutos.Rows.Count > 0 Then
-                dgvProdutos.Rows(0).Selected = True
-            End If
+                ' Configurar colunas baseado na estrutura real
+                ConfigurarColunasProdutosOtimizado()
+
+                ' Selecionar primeiro produto se existir
+                If dgvProdutos.Rows.Count > 0 Then
+                    dgvProdutos.Rows(0).Selected = True
+                End If
+
+            Finally
+                dgvProdutos.ResumeLayout(True)
+                Me.Cursor = Cursors.Default
+            End Try
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.CarregarProdutos")
-            MessageBox.Show(String.Format("Erro ao carregar produtos: {0}", ex.Message), "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show($"Erro ao carregar produtos: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Me.Cursor = Cursors.Default
+        End Try
+    End Sub
+
+    Private Sub ConfigurarColunasProdutosOtimizado()
+        Try
+            If dgvProdutos.Columns.Count >= 7 Then
+                dgvProdutos.ConfigurarColunas(
+                New ColumnConfig(0, "Código", 80),
+                New ColumnConfig(1, "Descrição", 250),
+                New ColumnConfig(2, "Fabricante", 150),
+                New ColumnConfig(3, "Tipo", 100),
+                New ColumnConfig(4, "Custo", 80, True, DataGridViewContentAlignment.MiddleRight, "C2"),
+                New ColumnConfig(5, "Curva", 60),
+                New ColumnConfig(6, "Estoque", 80, True, DataGridViewContentAlignment.MiddleRight, "N2")
+            )
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ConfigurarColunasProdutosOtimizado")
+        End Try
+    End Sub
+
+    Private Sub CarregarDadosProdutoOtimizado(codigoProduto As String)
+        Try
+            ' Limpar dados anteriores
+            LimparDadosSecundarios()
+
+            ' Suspender layouts para performance
+            dgvEstoque.SuspendLayout()
+            dgvCompras.SuspendLayout()
+            dgvVendas.SuspendLayout()
+
+            Try
+                ' Carregar estoque
+                Dim estoqueData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_ESTOQUE, codigoProduto)
+                dgvEstoque.DataSource = estoqueData
+                ConfigurarColunasEstoqueOtimizado()
+                grpEstoque.Text = $"📊 Estoque Atual ({estoqueData.Rows.Count} registros)"
+
+                ' Carregar compras
+                Dim comprasData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_COMPRAS, codigoProduto)
+                dgvCompras.DataSource = comprasData
+                ConfigurarColunasComprasOtimizado()
+                grpCompras.Text = $"📈 Compras ({comprasData.Rows.Count} registros)"
+
+                ' Carregar vendas
+                Dim vendasData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_VENDAS, codigoProduto)
+                dgvVendas.DataSource = vendasData
+                ConfigurarColunasVendasOtimizado()
+                grpVendas.Text = $"📉 Vendas ({vendasData.Rows.Count} registros)"
+
+                ' Carregar imagem de forma segura
+                CarregarImagemProdutoSeguro(codigoProduto)
+
+            Finally
+                dgvEstoque.ResumeLayout(True)
+                dgvCompras.ResumeLayout(True)
+                dgvVendas.ResumeLayout(True)
+            End Try
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.CarregarDadosProdutoOtimizado")
+        End Try
+    End Sub
+
+    Private Sub ConfigurarColunasEstoqueOtimizado()
+        Try
+            If dgvEstoque.DataSource IsNot Nothing AndAlso dgvEstoque.Columns.Count >= 9 Then
+                dgvEstoque.ConfigurarColunas(
+                New ColumnConfig(0, "Código", 70),
+                New ColumnConfig(1, "Loja", 100),
+                New ColumnConfig(2, "Disponível", 80, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(3, "Pré-Venda", 80, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(4, "Conta Cliente", 90, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(5, "Transf.Pend.", 90, True, DataGridViewContentAlignment.MiddleCenter),
+                New ColumnConfig(6, "Em Trânsito", 90, True, DataGridViewContentAlignment.MiddleCenter),
+                New ColumnConfig(7, "Ped.Compra", 90, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(8, "Total", 80, True, DataGridViewContentAlignment.MiddleRight, "N2")
+            )
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ConfigurarColunasEstoqueOtimizado")
         End Try
     End Sub
 
@@ -214,6 +305,100 @@ Public Class UcReposicaoEstoque
         End If
         filtroAtual = txtFiltro.Text.Trim()
         AplicarFiltro()
+    End Sub
+
+
+    ' 5. Configurar colunas de compras otimizado
+    Private Sub ConfigurarColunasComprasOtimizado()
+        Try
+            If dgvCompras.DataSource IsNot Nothing AndAlso dgvCompras.Columns.Count >= 7 Then
+                dgvCompras.ConfigurarColunas(
+                New ColumnConfig(0, "Código", 70),
+                New ColumnConfig(1, "Data", 80),
+                New ColumnConfig(2, "Cariacica", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(3, "Serra", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(4, "Linhares", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(5, "Marechal", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(6, "Atacado", 85, True, DataGridViewContentAlignment.MiddleRight, "N2")
+            )
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ConfigurarColunasComprasOtimizado")
+        End Try
+    End Sub
+
+    ' 6. Configurar colunas de vendas otimizado
+    Private Sub ConfigurarColunasVendasOtimizado()
+        Try
+            If dgvVendas.DataSource IsNot Nothing AndAlso dgvVendas.Columns.Count >= 7 Then
+                dgvVendas.ConfigurarColunas(
+                New ColumnConfig(0, "Código", 70),
+                New ColumnConfig(1, "Data", 80),
+                New ColumnConfig(2, "Cariacica", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(3, "Serra", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(4, "Linhares", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(5, "Marechal", 85, True, DataGridViewContentAlignment.MiddleRight, "N2"),
+                New ColumnConfig(6, "Atacado", 85, True, DataGridViewContentAlignment.MiddleRight, "N2")
+            )
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ConfigurarColunasVendasOtimizado")
+        End Try
+    End Sub
+
+    ' 7. Carregar imagem de forma segura para evitar exceptions
+    Private Sub CarregarImagemProdutoSeguro(codigoProduto As String)
+        Try
+            ' Limpar imagem anterior de forma segura
+            If pbProduto.Image IsNot Nothing Then
+                Dim oldImage = pbProduto.Image
+                pbProduto.Image = Nothing
+                oldImage.Dispose()
+            End If
+
+            grpImagem.Text = "🖼️ Imagem do Produto - Carregando..."
+
+            ' Procurar imagem
+            Dim imagemEncontrada As Boolean = False
+
+            For Each extensao As String In ConfiguracaoApp.EXTENSOES_IMAGEM
+                Dim caminhoImagem As String = Path.Combine(ConfiguracaoApp.CAMINHO_IMAGENS, $"{codigoProduto}{extensao}")
+
+                If File.Exists(caminhoImagem) Then
+                    Try
+                        ' Verificar tamanho do arquivo
+                        Dim fileInfo As New FileInfo(caminhoImagem)
+                        If fileInfo.Length > ConfiguracaoApp.TAMANHO_MAXIMO_IMAGEM Then
+                            Continue For
+                        End If
+
+                        ' Carregar imagem de forma segura
+                        Using fs As New FileStream(caminhoImagem, FileMode.Open, FileAccess.Read, FileShare.Read)
+                            Using ms As New MemoryStream()
+                                fs.CopyTo(ms)
+                                ms.Position = 0
+                                pbProduto.Image = Image.FromStream(ms)
+                            End Using
+                        End Using
+
+                        imagemEncontrada = True
+                        grpImagem.Text = "🖼️ Imagem do Produto"
+                        Exit For
+
+                    Catch imgEx As Exception
+                        LogErros.RegistrarErro(imgEx, $"Erro ao carregar imagem: {caminhoImagem}")
+                    End Try
+                End If
+            Next
+
+            If Not imagemEncontrada Then
+                grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "CarregarImagemProdutoSeguro")
+            grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+        End Try
     End Sub
 
     Private Sub AplicarFiltro()
@@ -312,16 +497,30 @@ Public Class UcReposicaoEstoque
 
             If dgvProdutos.SelectedRows.Count > 0 Then
                 Dim produtoSelecionadoRow As DataGridViewRow = dgvProdutos.SelectedRows(0)
-                Dim codigoProduto As String = If(produtoSelecionadoRow.Cells(0).Value IsNot Nothing, produtoSelecionadoRow.Cells(0).Value.ToString(), "")
 
-                If Not String.IsNullOrEmpty(codigoProduto) AndAlso codigoProduto <> produtoSelecionado Then
-                    produtoSelecionado = codigoProduto
-                    CarregarDadosProdutoAsync(codigoProduto)
+                If produtoSelecionadoRow.Cells.Count > 0 Then
+                    Dim codigoProduto As String = If(produtoSelecionadoRow.Cells(0).Value IsNot Nothing,
+                                                produtoSelecionadoRow.Cells(0).Value.ToString(), "")
+
+                    If Not String.IsNullOrEmpty(codigoProduto) AndAlso codigoProduto <> produtoSelecionado Then
+                        produtoSelecionado = codigoProduto
+
+                        ' Usar cursor de espera
+                        Me.Cursor = Cursors.WaitCursor
+
+                        Try
+                            ' Chamar método otimizado
+                            CarregarDadosProdutoOtimizado(codigoProduto)
+                        Finally
+                            Me.Cursor = Cursors.Default
+                        End Try
+                    End If
                 End If
             End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.DebounceTimer_Tick")
+            Me.Cursor = Cursors.Default
         End Try
     End Sub
 
@@ -360,54 +559,94 @@ Public Class UcReposicaoEstoque
 
     Private Sub CarregarDadosProdutoAsync(codigoProduto As String)
         Try
+            LogDebug($"Iniciando carregamento para produto: {codigoProduto}")
+
             ' Limpar dados anteriores
             LimparDadosSecundarios()
 
             ' Mostrar indicadores de carregamento
             MostrarIndicadoresCarregamento(True)
 
-            ' Carregar dados de forma assíncrona
-            Task.Run(Sub()
-                         Try
-                             ' Carregar estoque
-                             Dim estoqueData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_ESTOQUE, codigoProduto)
-                             Me.Invoke(Sub()
-                                           dgvEstoque.DataSource = estoqueData
-                                           ConfigurarColunasEstoque()
-                                           grpEstoque.Text = String.Format("📊 Estoque Atual ({0} registros)", estoqueData.Rows.Count)
-                                       End Sub)
+            ' Verificar se PowerQueryManager está disponível
+            If powerQueryManager Is Nothing Then
+                LogDebug("ERRO: PowerQueryManager é Nothing!")
+                MostrarIndicadoresCarregamento(False)
+                Return
+            End If
 
-                             ' Carregar compras
-                             Dim comprasData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_COMPRAS, codigoProduto)
-                             Me.Invoke(Sub()
-                                           dgvCompras.DataSource = comprasData
-                                           ConfigurarColunasCompras()
-                                           grpCompras.Text = String.Format("📈 Compras ({0} registros)", comprasData.Rows.Count)
-                                       End Sub)
+            ' Carregar dados SINCRONAMENTE primeiro para debug
+            Try
+                LogDebug("Carregando estoque...")
+                Dim estoqueData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_ESTOQUE, codigoProduto)
+                dgvEstoque.DataSource = estoqueData
+                ConfigurarColunasEstoque()
+                grpEstoque.Text = String.Format("📊 Estoque Atual ({0} registros)", estoqueData.Rows.Count)
+                LogDebug($"Estoque carregado: {estoqueData.Rows.Count} registros")
 
-                             ' Carregar vendas
-                             Dim vendasData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_VENDAS, codigoProduto)
-                             Me.Invoke(Sub()
-                                           dgvVendas.DataSource = vendasData
-                                           ConfigurarColunasVendas()
-                                           grpVendas.Text = String.Format("📉 Vendas ({0} registros)", vendasData.Rows.Count)
-                                       End Sub)
+                LogDebug("Carregando compras...")
+                Dim comprasData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_COMPRAS, codigoProduto)
+                dgvCompras.DataSource = comprasData
+                ConfigurarColunasCompras()
+                grpCompras.Text = String.Format("📈 Compras ({0} registros)", comprasData.Rows.Count)
+                LogDebug($"Compras carregadas: {comprasData.Rows.Count} registros")
 
-                             ' Carregar imagem por último
-                             Me.Invoke(Sub() CarregarImagemProdutoAsync(codigoProduto))
+                LogDebug("Carregando vendas...")
+                Dim vendasData = CarregarDadosFiltrados(ConfiguracaoApp.TABELA_VENDAS, codigoProduto)
+                dgvVendas.DataSource = vendasData
+                ConfigurarColunasVendas()
+                grpVendas.Text = String.Format("📉 Vendas ({0} registros)", vendasData.Rows.Count)
+                LogDebug($"Vendas carregadas: {vendasData.Rows.Count} registros")
 
-                         Catch ex As Exception
-                             LogErros.RegistrarErro(ex, String.Format("UcReposicaoEstoque.CarregarDadosProdutoAsync({0})", codigoProduto))
-                             Me.Invoke(Sub()
-                                           MostrarIndicadoresCarregamento(False)
-                                           MessageBox.Show(String.Format("Erro ao carregar dados do produto: {0}", ex.Message), "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
-                                       End Sub)
-                         End Try
-                     End Sub)
+                ' Carregar imagem
+                CarregarImagemProduto(codigoProduto)
+
+                ' Limpar indicadores
+                MostrarIndicadoresCarregamento(False)
+
+            Catch ex As Exception
+                LogDebug($"ERRO ao carregar dados: {ex.Message}")
+                LogErros.RegistrarErro(ex, "CarregarDadosProdutoAsync.Sync")
+                MostrarIndicadoresCarregamento(False)
+            End Try
 
         Catch ex As Exception
+            LogDebug($"ERRO geral: {ex.Message}")
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.CarregarDadosProdutoAsync")
             MostrarIndicadoresCarregamento(False)
+        End Try
+    End Sub
+
+    Private Sub CarregarImagemProduto(codigoProduto As String)
+        Try
+            LogDebug($"Carregando imagem para: {codigoProduto}")
+
+            ' Limpar imagem anterior
+            If pbProduto.Image IsNot Nothing Then
+                pbProduto.Image.Dispose()
+                pbProduto.Image = Nothing
+            End If
+
+            ' Procurar imagem
+            For Each extensao As String In ConfiguracaoApp.EXTENSOES_IMAGEM
+                Dim caminhoImagem As String = Path.Combine(ConfiguracaoApp.CAMINHO_IMAGENS, $"{codigoProduto}{extensao}")
+
+                If File.Exists(caminhoImagem) Then
+                    LogDebug($"Imagem encontrada: {caminhoImagem}")
+                    Using fs As New FileStream(caminhoImagem, FileMode.Open, FileAccess.Read)
+                        pbProduto.Image = Image.FromStream(fs)
+                    End Using
+                    grpImagem.Text = "🖼️ Imagem do Produto"
+                    Return
+                End If
+            Next
+
+            LogDebug("Nenhuma imagem encontrada")
+            grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+
+        Catch ex As Exception
+            LogDebug($"ERRO ao carregar imagem: {ex.Message}")
+            LogErros.RegistrarErro(ex, "CarregarImagemProduto")
+            grpImagem.Text = "🖼️ Imagem do Produto - Erro"
         End Try
     End Sub
 
@@ -499,24 +738,43 @@ Public Class UcReposicaoEstoque
 
     Private Function CarregarDadosFiltrados(nomeTabela As String, codigoProduto As String) As System.Data.DataTable
         Try
+            LogDebug($"CarregarDadosFiltrados: {nomeTabela} para produto {codigoProduto}")
+
             If powerQueryManager Is Nothing Then
+                LogDebug("ERRO: powerQueryManager é Nothing")
                 Return New System.Data.DataTable()
             End If
 
             Dim tabela As ListObject = powerQueryManager.ObterTabela(nomeTabela)
-            If tabela Is Nothing Then Return New System.Data.DataTable()
+            If tabela Is Nothing Then
+                LogDebug($"AVISO: Tabela {nomeTabela} não encontrada")
+                Return New System.Data.DataTable()
+            End If
 
+            LogDebug($"Tabela {nomeTabela} encontrada, convertendo...")
             Dim dataTable As System.Data.DataTable = DataHelper.ConvertListObjectToDataTable(tabela)
+            LogDebug($"Total de registros na tabela: {dataTable.Rows.Count}")
 
-            ' Filtrar por código do produto (assumindo que a primeira coluna é o código)
+            ' Debug: mostrar nomes das colunas
+            Dim colunas As String = String.Join(", ", dataTable.Columns.Cast(Of DataColumn).Select(Function(c) c.ColumnName))
+            LogDebug($"Colunas: {colunas}")
+
+            ' Filtrar por código do produto
             If dataTable.Columns.Count > 0 Then
-                Return DataHelper.FiltrarDataTable(dataTable, dataTable.Columns(0).ColumnName, codigoProduto)
+                Dim nomeColuna As String = dataTable.Columns(0).ColumnName
+                LogDebug($"Filtrando pela coluna: {nomeColuna}")
+
+                Dim resultado = DataHelper.FiltrarDataTable(dataTable, nomeColuna, codigoProduto)
+                LogDebug($"Registros após filtro: {resultado.Rows.Count}")
+
+                Return resultado
             End If
 
             Return dataTable
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, String.Format("UcReposicaoEstoque.CarregarDadosFiltrados({0}, {1})", nomeTabela, codigoProduto))
+            LogDebug($"ERRO em CarregarDadosFiltrados: {ex.Message}")
+            LogErros.RegistrarErro(ex, $"UcReposicaoEstoque.CarregarDadosFiltrados({nomeTabela}, {codigoProduto})")
             Return New System.Data.DataTable()
         End Try
     End Function
@@ -636,6 +894,60 @@ Public Class UcReposicaoEstoque
             End If
         Finally
             MyBase.Dispose(disposing)
+        End Try
+    End Sub
+
+    ' Método para debug - adicione temporariamente
+    Private Sub LogDebug(mensagem As String)
+        Console.WriteLine($"[DEBUG] {DateTime.Now:HH:mm:ss.fff} - {mensagem}")
+        LogErros.RegistrarInfo(mensagem, "UcReposicaoEstoque.Debug")
+    End Sub
+
+    ' Adicione este método no UcReposicaoEstoque.vb para verificar estrutura das tabelas:
+
+    Private Sub VerificarEstruturaDados()
+        Try
+            Console.WriteLine("=== VERIFICANDO ESTRUTURA DAS TABELAS ===")
+
+            Dim tabelas As String() = {
+                ConfiguracaoApp.TABELA_PRODUTOS,
+                ConfiguracaoApp.TABELA_ESTOQUE,
+                ConfiguracaoApp.TABELA_COMPRAS,
+                ConfiguracaoApp.TABELA_VENDAS
+            }
+
+            For Each nomeTabela In tabelas
+                Console.WriteLine($"{vbCrLf}Tabela: {nomeTabela}")
+
+                Dim tabela = powerQueryManager.ObterTabela(nomeTabela)
+                If tabela IsNot Nothing Then
+                    Dim dt = DataHelper.ConvertListObjectToDataTable(tabela)
+
+                    Console.WriteLine($"  Total de registros: {dt.Rows.Count}")
+                    Console.WriteLine($"  Colunas ({dt.Columns.Count}):")
+
+                    For i As Integer = 0 To dt.Columns.Count - 1
+                        Console.WriteLine($"    [{i}] {dt.Columns(i).ColumnName} ({dt.Columns(i).DataType.Name})")
+                    Next
+
+                    ' Mostrar primeira linha como exemplo
+                    If dt.Rows.Count > 0 Then
+                        Console.WriteLine("  Primeira linha (exemplo):")
+                        For i As Integer = 0 To Math.Min(4, dt.Columns.Count - 1)
+                            Dim valor = If(dt.Rows(0)(i) IsNot Nothing, dt.Rows(0)(i).ToString(), "(vazio)")
+                            Console.WriteLine($"    {dt.Columns(i).ColumnName}: {valor}")
+                        Next
+                    End If
+                Else
+                    Console.WriteLine($"  ERRO: Tabela não encontrada!")
+                End If
+            Next
+
+            Console.WriteLine($"{vbCrLf}=== FIM DA VERIFICAÇÃO ===")
+
+        Catch ex As Exception
+            Console.WriteLine($"ERRO na verificação: {ex.Message}")
+            LogErros.RegistrarErro(ex, "VerificarEstruturaDados")
         End Try
     End Sub
 

@@ -167,6 +167,7 @@
     <Compile Include="DeploymentChecklist.vb" />
     <Compile Include="Helpers\Extensions.vb" />
     <Compile Include="Helpers\LogErros.vb" />
+    <Compile Include="IntegrationTests.vb" />
     <Compile Include="MainForm.Designer.vb">
       <DependentUpon>MainForm.vb</DependentUpon>
     </Compile>
@@ -174,10 +175,11 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="My Project\AssemblyInfo.vb" />
-    <Compile Include="Planilha1.Designer.vb">
-      <DependentUpon>Planilha1.Designer.xml</DependentUpon>
+    <Compile Include="PerformanceTests.vb" />
+    <Compile Include="SheetEstoqueVisao.Designer.vb">
+      <DependentUpon>SheetEstoqueVisao.Designer.xml</DependentUpon>
     </Compile>
-    <Compile Include="Planilha1.vb">
+    <Compile Include="SheetEstoqueVisao.vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
     <Compile Include="Planilha2.Designer.vb">
@@ -186,16 +188,16 @@
     <Compile Include="Planilha2.vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
-    <Compile Include="Planilha3.Designer.vb">
-      <DependentUpon>Planilha3.Designer.xml</DependentUpon>
+    <Compile Include="SheetCompras.Designer.vb">
+      <DependentUpon>SheetCompras.Designer.xml</DependentUpon>
     </Compile>
-    <Compile Include="Planilha3.vb">
+    <Compile Include="SheetCompras.vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
-    <Compile Include="Planilha4.Designer.vb">
-      <DependentUpon>Planilha4.Designer.xml</DependentUpon>
+    <Compile Include="SheetVendas.Designer.vb">
+      <DependentUpon>SheetVendas.Designer.xml</DependentUpon>
     </Compile>
-    <Compile Include="Planilha4.vb">
+    <Compile Include="SheetVendas.vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
     <Compile Include="Planilha5.Designer.vb">
@@ -210,10 +212,10 @@
     <Compile Include="Planilha6.vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
-    <Compile Include="Planilha7.Designer.vb">
-      <DependentUpon>Planilha7.Designer.xml</DependentUpon>
+    <Compile Include="SheetProdutos .Designer.vb">
+      <DependentUpon>SheetProdutos .Designer.xml</DependentUpon>
     </Compile>
-    <Compile Include="Planilha7.vb">
+    <Compile Include="SheetProdutos .vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
     <Compile Include="Planilha8.Designer.vb">
@@ -267,8 +269,8 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Planilha1.Designer.xml">
-      <DependentUpon>Planilha1.vb</DependentUpon>
+    <None Include="SheetEstoqueVisao.Designer.xml">
+      <DependentUpon>SheetEstoqueVisao.vb</DependentUpon>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -277,13 +279,13 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Planilha3.Designer.xml">
-      <DependentUpon>Planilha3.vb</DependentUpon>
+    <None Include="SheetCompras.Designer.xml">
+      <DependentUpon>SheetCompras.vb</DependentUpon>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Planilha4.Designer.xml">
-      <DependentUpon>Planilha4.vb</DependentUpon>
+    <None Include="SheetVendas.Designer.xml">
+      <DependentUpon>SheetVendas.vb</DependentUpon>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -297,8 +299,8 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Planilha7.Designer.xml">
-      <DependentUpon>Planilha7.vb</DependentUpon>
+    <None Include="SheetProdutos .Designer.xml">
+      <DependentUpon>SheetProdutos .vb</DependentUpon>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -341,13 +343,13 @@
       <FlavorProperties GUID="{BAA0C2D2-18E2-41B9-852F-F413020CAA33}">
         <ProjectProperties HostName="Tratamento dos dados.xlsx" HostPackage="{3F2B7691-D1D1-402F-9370-2704A737CF60}" OfficeVersion="15.0" VstxVersion="4.0" ApplicationType="XLS" Language="VB" TemplatesPath="VSTOTemplates" DebugInfoExeName="C:\Program Files\Microsoft Office\root\Office16\excel.exe" DebugInfoCommandLine="/x &quot;[$OUTPUT]Tratamento dos dados.xlsx&quot;" />
         <Host Name="Excel Document" Path=".\Tratamento dos dados.xlsx">
-          <HostItem Name="Planilha1" Code="Planilha1.vb" CanonicalName="Planilha1" DisplayName="EstoqueVisao" Blueprint="Planilha1.Designer.xml" GeneratedCode="Planilha1.Designer.vb" />
+          <HostItem Name="Planilha1" Code="SheetEstoqueVisao.vb" CanonicalName="Planilha1" DisplayName="EstoqueVisao" Blueprint="SheetEstoqueVisao.Designer.xml" GeneratedCode="SheetEstoqueVisao.Designer.vb" />
           <HostItem Name="Planilha2" Code="Planilha2.vb" CanonicalName="Planilha2" DisplayName="Data últimos 2 anos" Blueprint="Planilha2.Designer.xml" GeneratedCode="Planilha2.Designer.vb" />
-          <HostItem Name="Planilha3" Code="Planilha3.vb" CanonicalName="Planilha3" DisplayName="Compras" Blueprint="Planilha3.Designer.xml" GeneratedCode="Planilha3.Designer.vb" />
-          <HostItem Name="Planilha4" Code="Planilha4.vb" CanonicalName="Planilha4" DisplayName="Vendas" Blueprint="Planilha4.Designer.xml" GeneratedCode="Planilha4.Designer.vb" />
+          <HostItem Name="Planilha3" Code="SheetCompras.vb" CanonicalName="Planilha3" DisplayName="Compras" Blueprint="SheetCompras.Designer.xml" GeneratedCode="SheetCompras.Designer.vb" />
+          <HostItem Name="Planilha4" Code="SheetVendas.vb" CanonicalName="Planilha4" DisplayName="Vendas" Blueprint="SheetVendas.Designer.xml" GeneratedCode="SheetVendas.Designer.vb" />
           <HostItem Name="Planilha5" Code="Planilha5.vb" CanonicalName="Planilha5" DisplayName="Histórico de vendas" Blueprint="Planilha5.Designer.xml" GeneratedCode="Planilha5.Designer.vb" />
           <HostItem Name="Planilha6" Code="Planilha6.vb" CanonicalName="Planilha6" DisplayName="Histórico de compras" Blueprint="Planilha6.Designer.xml" GeneratedCode="Planilha6.Designer.vb" />
-          <HostItem Name="Planilha7" Code="Planilha7.vb" CanonicalName="Planilha7" DisplayName="Produtos" Blueprint="Planilha7.Designer.xml" GeneratedCode="Planilha7.Designer.vb" />
+          <HostItem Name="Planilha7" Code="SheetProdutos .vb" CanonicalName="Planilha7" DisplayName="Produtos" Blueprint="SheetProdutos .Designer.xml" GeneratedCode="SheetProdutos .Designer.vb" />
           <HostItem Name="Planilha8" Code="Planilha8.vb" CanonicalName="Planilha8" DisplayName="ProdutosManual" Blueprint="Planilha8.Designer.xml" GeneratedCode="Planilha8.Designer.vb" />
           <HostItem Name="ThisWorkbook" Code="ThisWorkbook.vb" CanonicalName="ThisWorkbook" Blueprint="ThisWorkbook.Designer.xml" GeneratedCode="ThisWorkbook.Designer.vb" />
         </Host>
