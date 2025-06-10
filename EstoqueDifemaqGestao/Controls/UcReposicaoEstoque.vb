@@ -293,11 +293,16 @@ Public Class UcReposicaoEstoque
     End Sub
 
     Private Sub TxtFiltro_TextChanged(sender As Object, e As EventArgs)
-        If filtroTimer IsNot Nothing Then
-            filtroTimer.Stop()
-            filtroTimer.Start()
-        End If
+        Try
+            If filtroTimer IsNot Nothing Then
+                filtroTimer.Stop()
+                filtroTimer.Start()
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.TxtFiltro_TextChanged")
+        End Try
     End Sub
+
 
     Private Sub FiltroTimer_Tick(sender As Object, e As EventArgs)
         If filtroTimer IsNot Nothing Then
@@ -527,31 +532,37 @@ Public Class UcReposicaoEstoque
     Private Sub DgvProdutos_CellDoubleClick(sender As Object, e As DataGridViewCellEventArgs)
         Try
             If e.RowIndex >= 0 Then
-                Dim produto As String = If(dgvProdutos.Rows(e.RowIndex).Cells(0).Value IsNot Nothing, dgvProdutos.Rows(e.RowIndex).Cells(0).Value.ToString(), "")
-                Dim descricao As String = ""
+                Dim row = dgvProdutos.Rows(e.RowIndex)
 
-                If dgvProdutos.Columns.Count > 1 Then
-                    descricao = If(dgvProdutos.Rows(e.RowIndex).Cells(1).Value IsNot Nothing, dgvProdutos.Rows(e.RowIndex).Cells(1).Value.ToString(), "")
-                End If
+                ' Coletar informações do produto
+                Dim info As New System.Text.StringBuilder()
 
-                ' Criar formulário de detalhes mais elaborado
-                Dim detalhes As New System.Text.StringBuilder()
-                detalhes.AppendLine(String.Format("Produto: {0}", produto))
-                detalhes.AppendLine(String.Format("Descrição: {0}", descricao))
+                ' Adicionar todas as colunas visíveis
+                For Each col As DataGridViewColumn In dgvProdutos.Columns
+                    If col.Visible Then
+                        Dim valor = If(row.Cells(col.Index).Value IsNot Nothing, row.Cells(col.Index).Value.ToString(), "")
+                        info.AppendLine($"{col.HeaderText}: {valor}")
+                    End If
+                Next
 
                 ' Adicionar informações de estoque se disponível
                 If dgvEstoque.Rows.Count > 0 Then
+                    info.AppendLine()
+                    info.AppendLine("=== ESTOQUE ===")
                     Dim totalEstoque As Decimal = 0
-                    For Each row As DataGridViewRow In dgvEstoque.Rows
-                        If row.Cells.Count > 2 AndAlso IsNumeric(row.Cells(2).Value) Then
-                            totalEstoque += Convert.ToDecimal(row.Cells(2).Value)
+
+                    For Each estoqueRow As DataGridViewRow In dgvEstoque.Rows
+                        If estoqueRow.Cells.Count > 8 AndAlso IsNumeric(estoqueRow.Cells(8).Value) Then
+                            totalEstoque += Convert.ToDecimal(estoqueRow.Cells(8).Value)
                         End If
                     Next
-                    detalhes.AppendLine(String.Format("Estoque Total: {0:N2}", totalEstoque))
+
+                    info.AppendLine($"Total em Estoque: {totalEstoque:N2}")
                 End If
 
-                MessageBox.Show(detalhes.ToString(), "Detalhes do Produto", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                MessageBox.Show(info.ToString(), "Detalhes do Produto", MessageBoxButtons.OK, MessageBoxIcon.Information)
             End If
+
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.DgvProdutos_CellDoubleClick")
         End Try
@@ -948,6 +959,90 @@ Public Class UcReposicaoEstoque
         Catch ex As Exception
             Console.WriteLine($"ERRO na verificação: {ex.Message}")
             LogErros.RegistrarErro(ex, "VerificarEstruturaDados")
+        End Try
+    End Sub
+
+    Private Sub ConfigurarEventos()
+        Try
+            ' Eventos do DataGridView de Produtos
+            AddHandler dgvProdutos.SelectionChanged, AddressOf DgvProdutos_SelectionChanged
+            AddHandler dgvProdutos.CellDoubleClick, AddressOf DgvProdutos_CellDoubleClick
+            AddHandler dgvProdutos.DataBindingComplete, AddressOf DgvProdutos_DataBindingComplete
+
+            ' Eventos do filtro
+            AddHandler txtFiltro.TextChanged, AddressOf TxtFiltro_TextChanged
+            AddHandler txtFiltro.Enter, AddressOf TxtFiltro_Enter
+            AddHandler txtFiltro.Leave, AddressOf TxtFiltro_Leave
+
+            ' Evento do botão atualizar
+            AddHandler btnAtualizar.Click, AddressOf BtnAtualizar_Click
+
+            ' Eventos adicionais para melhor UX
+            AddHandler dgvProdutos.KeyDown, AddressOf DgvProdutos_KeyDown
+
+            LogErros.RegistrarInfo("Eventos configurados", "UcReposicaoEstoque.ConfigurarEventos")
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ConfigurarEventos")
+        End Try
+    End Sub
+
+    ' Adicione também estes manipuladores de eventos que podem estar faltando:
+
+    Private Sub DgvProdutos_DataBindingComplete(sender As Object, e As DataGridViewBindingCompleteEventArgs)
+        Try
+            ' Ajustar larguras das colunas após binding
+            If dgvProdutos.Columns.Count > 0 Then
+                dgvProdutos.AutoResizeColumns(DataGridViewAutoSizeColumnsMode.DisplayedCells)
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.DgvProdutos_DataBindingComplete")
+        End Try
+    End Sub
+
+    Private Sub TxtFiltro_Enter(sender As Object, e As EventArgs)
+        Try
+            ' Selecionar todo o texto ao entrar no campo
+            txtFiltro.SelectAll()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.TxtFiltro_Enter")
+        End Try
+    End Sub
+
+    Private Sub TxtFiltro_Leave(sender As Object, e As EventArgs)
+        Try
+            ' Pode adicionar lógica adicional se necessário
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.TxtFiltro_Leave")
+        End Try
+    End Sub
+
+    Private Sub DgvProdutos_KeyDown(sender As Object, e As KeyEventArgs)
+        Try
+            ' Permitir navegação com teclado
+            Select Case e.KeyCode
+                Case Keys.Enter
+                    ' Enter funciona como double-click
+                    If dgvProdutos.SelectedRows.Count > 0 Then
+                        DgvProdutos_CellDoubleClick(sender, New DataGridViewCellEventArgs(0, dgvProdutos.SelectedRows(0).Index))
+                    End If
+                    e.Handled = True
+
+                Case Keys.F5
+                    ' F5 para atualizar
+                    btnAtualizar.PerformClick()
+                    e.Handled = True
+
+                Case Keys.F, Keys.F3
+                    If e.Control OrElse e.KeyCode = Keys.F3 Then
+                        ' Ctrl+F ou F3 para focar no filtro
+                        txtFiltro.Focus()
+                        e.Handled = True
+                    End If
+            End Select
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.DgvProdutos_KeyDown")
         End Try
     End Sub
 
