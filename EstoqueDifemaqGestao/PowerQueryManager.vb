@@ -1,17 +1,23 @@
 ﻿Imports Microsoft.Office.Interop.Excel
 Imports System.Threading
+Imports WinFormsApp = System.Windows.Forms.Application
 
 Public Class PowerQueryManager
     Private workbook As Workbook
-    Private timeoutSegundos As Integer  ' Removido ReadOnly para evitar conflito
-    Private maxTentativas As Integer = 3  ' Removido ReadOnly para evitar conflito
+    Private timeoutSegundos As Integer
+    Private maxTentativas As Integer = 2 ' Reduzido de 3 para 2
+
+    ' Cache para otimizar acesso às tabelas
+    Private tabelasCache As New Dictionary(Of String, ListObject)
+    Private cacheValido As DateTime = DateTime.MinValue
+    Private Const CACHE_TIMEOUT_MINUTES As Integer = 5
 
     Public Sub New(wb As Workbook)
         If wb Is Nothing Then
             Throw New ArgumentNullException("workbook", "Workbook não pode ser nulo")
         End If
         workbook = wb
-        timeoutSegundos = ConfiguracaoApp.TIMEOUT_POWERQUERY
+        timeoutSegundos = Math.Min(ConfiguracaoApp.TIMEOUT_POWERQUERY, 30) ' Máximo 30 segundos
     End Sub
 
     Public Sub AtualizarTodasConsultas()
@@ -19,65 +25,63 @@ Public Class PowerQueryManager
             Dim startTime As DateTime = DateTime.Now
             Dim tentativa As Integer = 1
 
-            LogErros.RegistrarInfo("Iniciando atualização de consultas Power Query", "PowerQueryManager.AtualizarTodasConsultas")
+            LogErros.RegistrarInfo("Iniciando atualização otimizada de consultas Power Query", "PowerQueryManager.AtualizarTodasConsultas")
 
-            ' Desabilitar alertas e eventos temporariamente
-            Dim estadoAnterior = SalvarEstadoAplicacao()
+            ' Configurações otimizadas do Excel
+            Dim estadoAnterior = ConfigurarExcelParaAtualizacao()
 
             Try
-                ' Tentar atualizar até o máximo de tentativas
                 While tentativa <= maxTentativas
                     Try
-                        LogErros.RegistrarInfo(String.Format("Tentativa {0} de {1}", tentativa, maxTentativas), "PowerQueryManager.AtualizarTodasConsultas")
+                        LogErros.RegistrarInfo($"Tentativa {tentativa} de {maxTentativas}", "PowerQueryManager.AtualizarTodasConsultas")
 
-                        ' Atualizar todas as conexões Power Query
-                        AtualizarConexoesPowerQuery()
+                        ' Atualizar de forma otimizada
+                        AtualizarConexoesPowerQueryOtimizado()
 
-                        ' Aguardar conclusão com timeout
-                        AguardarConclusaoAtualizacao(startTime)
+                        ' Aguardar com timeout reduzido
+                        AguardarConclusaoAtualizacaoOtimizada(startTime)
 
-                        ' Se chegou até aqui, sucesso
-                        LogErros.RegistrarInfo(String.Format("Consultas atualizadas com sucesso na tentativa {0}", tentativa), "PowerQueryManager.AtualizarTodasConsultas")
+                        LogErros.RegistrarInfo($"Consultas atualizadas com sucesso na tentativa {tentativa}", "PowerQueryManager.AtualizarTodasConsultas")
+
+                        ' Invalidar cache após atualização bem-sucedida
+                        InvalidarCache()
                         Exit While
 
                     Catch ex As TimeoutException
-                        LogErros.RegistrarErro(ex, String.Format("PowerQueryManager.AtualizarTodasConsultas - Timeout na tentativa {0}", tentativa))
+                        LogErros.RegistrarErro(ex, $"PowerQueryManager.AtualizarTodasConsultas - Timeout na tentativa {tentativa}")
                         tentativa += 1
                         If tentativa <= maxTentativas Then
-                            ' Aguardar antes da próxima tentativa
-                            Thread.Sleep(2000)
+                            Thread.Sleep(1000) ' Reduzido de 2000ms para 1000ms
                             startTime = DateTime.Now
                         End If
 
                     Catch ex As Exception
-                        LogErros.RegistrarErro(ex, String.Format("PowerQueryManager.AtualizarTodasConsultas - Erro na tentativa {0}", tentativa))
+                        LogErros.RegistrarErro(ex, $"PowerQueryManager.AtualizarTodasConsultas - Erro na tentativa {tentativa}")
                         tentativa += 1
                         If tentativa <= maxTentativas Then
-                            Thread.Sleep(1000)
+                            Thread.Sleep(500) ' Reduzido de 1000ms para 500ms
                             startTime = DateTime.Now
                         End If
                     End Try
                 End While
 
-                ' Se todas as tentativas falharam
                 If tentativa > maxTentativas Then
-                    Throw New Exception(String.Format("Falha ao atualizar consultas após {0} tentativas", maxTentativas))
+                    Throw New Exception($"Falha ao atualizar consultas após {maxTentativas} tentativas")
                 End If
 
             Finally
-                ' Restaurar configuração anterior
-                RestaurarEstadoAplicacao(estadoAnterior)
+                RestaurarConfiguracoesExcel(estadoAnterior)
             End Try
 
-            LogErros.RegistrarInfo("Atualização de consultas Power Query concluída", "PowerQueryManager.AtualizarTodasConsultas")
+            LogErros.RegistrarInfo("Atualização otimizada de consultas Power Query concluída", "PowerQueryManager.AtualizarTodasConsultas")
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "PowerQueryManager.AtualizarTodasConsultas")
-            Throw New Exception(String.Format("Erro ao atualizar consultas Power Query: {0}", ex.Message))
+            Throw New Exception($"Erro ao atualizar consultas Power Query: {ex.Message}")
         End Try
     End Sub
 
-    Private Function SalvarEstadoAplicacao() As Dictionary(Of String, Object)
+    Private Function ConfigurarExcelParaAtualizacao() As Dictionary(Of String, Object)
         Dim estado As New Dictionary(Of String, Object)
 
         Try
@@ -87,19 +91,20 @@ Public Class PowerQueryManager
                 estado("EnableEvents") = .EnableEvents
                 estado("Calculation") = .Calculation
 
+                ' Configurações otimizadas para atualização
                 .DisplayAlerts = False
                 .ScreenUpdating = False
                 .EnableEvents = False
                 .Calculation = XlCalculation.xlCalculationManual
             End With
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "PowerQueryManager.SalvarEstadoAplicacao")
+            LogErros.RegistrarErro(ex, "PowerQueryManager.ConfigurarExcelParaAtualizacao")
         End Try
 
         Return estado
     End Function
 
-    Private Sub RestaurarEstadoAplicacao(estado As Dictionary(Of String, Object))
+    Private Sub RestaurarConfiguracoesExcel(estado As Dictionary(Of String, Object))
         Try
             If estado IsNot Nothing AndAlso workbook.Application IsNot Nothing Then
                 With workbook.Application
@@ -110,128 +115,123 @@ Public Class PowerQueryManager
                 End With
             End If
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "PowerQueryManager.RestaurarEstadoAplicacao")
+            LogErros.RegistrarErro(ex, "PowerQueryManager.RestaurarConfiguracoesExcel")
         End Try
     End Sub
 
-    Private Sub AtualizarConexoesPowerQuery()
+    Private Sub AtualizarConexoesPowerQueryOtimizado()
         Try
             Dim conexoesAtualizadas As Integer = 0
             Dim conexoesComErro As Integer = 0
 
-            ' Atualizar workbook connections
+            ' Atualizar apenas conexões Power Query essenciais
             For Each connection As WorkbookConnection In workbook.Connections
                 Try
-                    If EhConnectionPowerQuery(connection) Then
-                        LogErros.RegistrarInfo(String.Format("Atualizando conexão: {0}", connection.Name), "PowerQueryManager.AtualizarConexoesPowerQuery")
+                    If EhConnectionPowerQueryEssencial(connection) Then
+                        LogErros.RegistrarInfo($"Atualizando conexão essencial: {connection.Name}", "PowerQueryManager.AtualizarConexoesPowerQueryOtimizado")
                         connection.Refresh()
                         conexoesAtualizadas += 1
                     End If
                 Catch connEx As Exception
                     conexoesComErro += 1
-                    LogErros.RegistrarErro(connEx, String.Format("PowerQueryManager.AtualizarConexoesPowerQuery - Erro na conexão {0}", connection.Name))
+                    LogErros.RegistrarErro(connEx, $"PowerQueryManager.AtualizarConexoesPowerQueryOtimizado - Erro na conexão {connection.Name}")
                 End Try
             Next
 
-            ' Verificar se há queries nas planilhas
-            AtualizarQueriesPlanilhas()
+            ' Atualizar tabelas críticas apenas
+            AtualizarTabelasCriticas()
 
-            LogErros.RegistrarInfo(String.Format("Conexões atualizadas: {0}, Com erro: {1}", conexoesAtualizadas, conexoesComErro), "PowerQueryManager.AtualizarConexoesPowerQuery")
-
-            If conexoesAtualizadas = 0 Then
-                LogErros.RegistrarInfo("Nenhuma conexão Power Query encontrada", "PowerQueryManager.AtualizarConexoesPowerQuery")
-            End If
+            LogErros.RegistrarInfo($"Conexões atualizadas: {conexoesAtualizadas}, Com erro: {conexoesComErro}", "PowerQueryManager.AtualizarConexoesPowerQueryOtimizado")
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "PowerQueryManager.AtualizarConexoesPowerQuery")
+            LogErros.RegistrarErro(ex, "PowerQueryManager.AtualizarConexoesPowerQueryOtimizado")
             Throw
         End Try
     End Sub
 
-    Private Sub AtualizarQueriesPlanilhas()
+    Private Sub AtualizarTabelasCriticas()
         Try
-            For Each worksheet As Worksheet In workbook.Worksheets
+            ' Lista de tabelas críticas para o funcionamento do sistema
+            Dim tabelasCriticas As String() = {
+                ConfiguracaoApp.TABELA_PRODUTOS,
+                ConfiguracaoApp.TABELA_ESTOQUE,
+                ConfiguracaoApp.TABELA_COMPRAS,
+                ConfiguracaoApp.TABELA_VENDAS
+            }
+
+            For Each nomeTabela In tabelasCriticas
                 Try
-                    ' Atualizar ListObjects (tabelas) que podem ter consultas
-                    For Each listObj As ListObject In worksheet.ListObjects
-                        Try
-                            If listObj.QueryTable IsNot Nothing Then
-                                listObj.QueryTable.Refresh()
-                                LogErros.RegistrarInfo(String.Format("Tabela atualizada: {0} na planilha {1}", listObj.Name, worksheet.Name), "PowerQueryManager.AtualizarQueriesPlanilhas")
-                            End If
-                        Catch tableEx As Exception
-                            LogErros.RegistrarErro(tableEx, String.Format("PowerQueryManager.AtualizarQueriesPlanilhas - Erro na tabela {0}", listObj.Name))
-                        End Try
-                    Next
-
-                    ' Atualizar PivotTables se houver
-                    For Each pivotTable As PivotTable In worksheet.PivotTables
-                        Try
-                            pivotTable.RefreshTable()
-                            LogErros.RegistrarInfo(String.Format("PivotTable atualizada: {0} na planilha {1}", pivotTable.Name, worksheet.Name), "PowerQueryManager.AtualizarQueriesPlanilhas")
-                        Catch pivotEx As Exception
-                            LogErros.RegistrarErro(pivotEx, String.Format("PowerQueryManager.AtualizarQueriesPlanilhas - Erro na PivotTable {0}", pivotTable.Name))
-                        End Try
-                    Next
-
-                Catch wsEx As Exception
-                    LogErros.RegistrarErro(wsEx, String.Format("PowerQueryManager.AtualizarQueriesPlanilhas - Erro na planilha {0}", worksheet.Name))
-                    Continue For
+                    Dim tabela = ObterTabela(nomeTabela)
+                    If tabela IsNot Nothing AndAlso tabela.QueryTable IsNot Nothing Then
+                        tabela.QueryTable.Refresh()
+                        LogErros.RegistrarInfo($"Tabela crítica atualizada: {nomeTabela}", "PowerQueryManager.AtualizarTabelasCriticas")
+                    End If
+                Catch tableEx As Exception
+                    LogErros.RegistrarErro(tableEx, $"PowerQueryManager.AtualizarTabelasCriticas - Erro na tabela {nomeTabela}")
                 End Try
             Next
+
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "PowerQueryManager.AtualizarQueriesPlanilhas")
+            LogErros.RegistrarErro(ex, "PowerQueryManager.AtualizarTabelasCriticas")
         End Try
     End Sub
 
-    Private Function EhConnectionPowerQuery(connection As WorkbookConnection) As Boolean
+    Private Function EhConnectionPowerQueryEssencial(connection As WorkbookConnection) As Boolean
         Try
-            ' Verificar tipos de conexão que podem ser Power Query
+            ' Verificar se é uma conexão essencial para o sistema
+            Dim nomeConnection = connection.Name.ToLower()
+
+            ' Lista de padrões de nomes de conexões essenciais
+            Dim padroesCriticos As String() = {
+                "produtos", "estoque", "compras", "vendas",
+                "tblprodutos", "tblestoque", "tblcompras", "tblvendas"
+            }
+
+            For Each padrao In padroesCriticos
+                If nomeConnection.Contains(padrao) Then
+                    Return True
+                End If
+            Next
+
+            ' Verificar tipos de conexão
             Return connection.Type = XlConnectionType.xlConnectionTypeOLEDB OrElse
                    connection.Type = XlConnectionType.xlConnectionTypeODBC OrElse
-                   connection.Type = XlConnectionType.xlConnectionTypeTEXT OrElse
-                   connection.Type = XlConnectionType.xlConnectionTypeWEB OrElse
-                   connection.Type = XlConnectionType.xlConnectionTypeXMLMAP
+                   connection.Type = XlConnectionType.xlConnectionTypeTEXT
+
         Catch
             Return False
         End Try
     End Function
 
-    Private Sub AguardarConclusaoAtualizacao(startTime As DateTime)
+    Private Sub AguardarConclusaoAtualizacaoOtimizada(startTime As DateTime)
         Try
-            Dim ultimoCheck As DateTime = DateTime.Now
+            Dim timeoutReduzido = Math.Min(timeoutSegundos, 20) ' Máximo 20 segundos
             Dim intervalosVerificacao As Integer = 0
-            Const maxIntervalos As Integer = 100 ' Máximo de verificações
+            Const maxIntervalos As Integer = 50 ' Reduzido de 100 para 50
 
             Do While workbook.Application.CalculationState <> XlCalculationState.xlDone
-                System.Windows.Forms.Application.DoEvents()
-                Thread.Sleep(100)
+                WinFormsApp.DoEvents()
+                Thread.Sleep(200) ' Aumentado de 100ms para 200ms para reduzir CPU
                 intervalosVerificacao += 1
 
-                ' Log de progresso a cada 5 segundos
-                If DateTime.Now.Subtract(ultimoCheck).TotalSeconds >= 5 Then
-                    LogErros.RegistrarInfo(String.Format("Aguardando conclusão... ({0:F1}s)", DateTime.Now.Subtract(startTime).TotalSeconds), "PowerQueryManager.AguardarConclusaoAtualizacao")
-                    ultimoCheck = DateTime.Now
+                ' Verificar timeout com tempo reduzido
+                If DateTime.Now.Subtract(startTime).TotalSeconds > timeoutReduzido Then
+                    Throw New TimeoutException($"Timeout de {timeoutReduzido} segundos excedido ao aguardar atualização das consultas")
                 End If
 
-                ' Verificar timeout
-                If DateTime.Now.Subtract(startTime).TotalSeconds > timeoutSegundos Then
-                    Throw New TimeoutException(String.Format("Timeout de {0} segundos excedido ao aguardar atualização das consultas", timeoutSegundos))
-                End If
-
-                ' Verificar se não está travado em loop infinito
+                ' Sair mais rapidamente se necessário
                 If intervalosVerificacao > maxIntervalos Then
-                    LogErros.RegistrarInfo(String.Format("Muitas verificações ({0}), forçando saída", intervalosVerificacao), "PowerQueryManager.AguardarConclusaoAtualizacao")
+                    LogErros.RegistrarInfo($"Muitas verificações ({intervalosVerificacao}), forçando saída", "PowerQueryManager.AguardarConclusaoAtualizacaoOtimizada")
                     Exit Do
                 End If
             Loop
 
-            ' Aguardar um pouco mais para garantir que tudo foi processado
-            Thread.Sleep(500)
-            System.Windows.Forms.Application.DoEvents()
+            ' Aguardar final reduzido
+            Thread.Sleep(200) ' Reduzido de 500ms para 200ms
+            WinFormsApp.DoEvents()
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "PowerQueryManager.AguardarConclusaoAtualizacao")
+            LogErros.RegistrarErro(ex, "PowerQueryManager.AguardarConclusaoAtualizacaoOtimizada")
             Throw
         End Try
     End Sub
@@ -239,33 +239,54 @@ Public Class PowerQueryManager
     Public Function ObterTabela(nomeTabela As String) As ListObject
         Try
             If String.IsNullOrEmpty(nomeTabela) Then
-                LogErros.RegistrarInfo("Nome da tabela está vazio", "PowerQueryManager.ObterTabela")
                 Return Nothing
             End If
 
-            LogErros.RegistrarInfo(String.Format("Procurando tabela: {0}", nomeTabela), "PowerQueryManager.ObterTabela")
+            ' Verificar cache primeiro
+            If CacheEstaValido() AndAlso tabelasCache.ContainsKey(nomeTabela) Then
+                Dim tabelaCache = tabelasCache(nomeTabela)
+                If tabelaCache IsNot Nothing Then
+                    Return tabelaCache
+                End If
+            End If
 
+            LogErros.RegistrarInfo($"Procurando tabela: {nomeTabela}", "PowerQueryManager.ObterTabela")
+
+            ' Buscar tabela otimizada
             For Each worksheet As Worksheet In workbook.Worksheets
                 Try
                     For Each tabela As ListObject In worksheet.ListObjects
                         If tabela.Name.Equals(nomeTabela, StringComparison.OrdinalIgnoreCase) Then
-                            LogErros.RegistrarInfo(String.Format("Tabela encontrada: {0} na planilha {1}", nomeTabela, worksheet.Name), "PowerQueryManager.ObterTabela")
+                            ' Armazenar no cache
+                            tabelasCache(nomeTabela) = tabela
+                            cacheValido = DateTime.Now
+
+                            LogErros.RegistrarInfo($"Tabela encontrada: {nomeTabela} na planilha {worksheet.Name}", "PowerQueryManager.ObterTabela")
                             Return tabela
                         End If
                     Next
                 Catch wsEx As Exception
-                    LogErros.RegistrarErro(wsEx, String.Format("PowerQueryManager.ObterTabela - Erro na planilha {0}", worksheet.Name))
+                    LogErros.RegistrarErro(wsEx, $"PowerQueryManager.ObterTabela - Erro na planilha {worksheet.Name}")
                     Continue For
                 End Try
             Next
 
-            LogErros.RegistrarInfo(String.Format("Tabela não encontrada: {0}", nomeTabela), "PowerQueryManager.ObterTabela")
+            LogErros.RegistrarInfo($"Tabela não encontrada: {nomeTabela}", "PowerQueryManager.ObterTabela")
             Return Nothing
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, String.Format("PowerQueryManager.ObterTabela({0})", nomeTabela))
+            LogErros.RegistrarErro(ex, $"PowerQueryManager.ObterTabela({nomeTabela})")
             Return Nothing
         End Try
+    End Function
+
+    Private Sub InvalidarCache()
+        tabelasCache.Clear()
+        cacheValido = DateTime.MinValue
+    End Sub
+
+    Private Function CacheEstaValido() As Boolean
+        Return DateTime.Now.Subtract(cacheValido).TotalMinutes < CACHE_TIMEOUT_MINUTES
     End Function
 
     Public Function ListarTabelas() As List(Of String)
@@ -275,16 +296,16 @@ Public Class PowerQueryManager
             For Each worksheet As Worksheet In workbook.Worksheets
                 Try
                     For Each tabela As ListObject In worksheet.ListObjects
-                        tabelas.Add(String.Format("{0} ({1})", tabela.Name, worksheet.Name))
-                        LogErros.RegistrarInfo(String.Format("Tabela encontrada: {0} na planilha {1}", tabela.Name, worksheet.Name), "PowerQueryManager.ListarTabelas")
+                        tabelas.Add($"{tabela.Name} ({worksheet.Name})")
+                        LogErros.RegistrarInfo($"Tabela encontrada: {tabela.Name} na planilha {worksheet.Name}", "PowerQueryManager.ListarTabelas")
                     Next
                 Catch wsEx As Exception
-                    LogErros.RegistrarErro(wsEx, String.Format("PowerQueryManager.ListarTabelas - Erro na planilha {0}", worksheet.Name))
+                    LogErros.RegistrarErro(wsEx, $"PowerQueryManager.ListarTabelas - Erro na planilha {worksheet.Name}")
                     Continue For
                 End Try
             Next
 
-            LogErros.RegistrarInfo(String.Format("Total de tabelas encontradas: {0}", tabelas.Count), "PowerQueryManager.ListarTabelas")
+            LogErros.RegistrarInfo($"Total de tabelas encontradas: {tabelas.Count}", "PowerQueryManager.ListarTabelas")
             Return tabelas
 
         Catch ex As Exception
@@ -300,17 +321,17 @@ Public Class PowerQueryManager
             For Each connection As WorkbookConnection In workbook.Connections
                 Try
                     Dim tipoConexao As String = connection.Type.ToString()
-                    Dim isPowerQuery As Boolean = EhConnectionPowerQuery(connection)
+                    Dim isPowerQuery As Boolean = EhConnectionPowerQueryEssencial(connection)
 
-                    status.Add(connection.Name, String.Format("Ativa ({0}){1}", tipoConexao, If(isPowerQuery, " [Power Query]", "")))
+                    status.Add(connection.Name, $"Ativa ({tipoConexao}){If(isPowerQuery, " [Power Query]", "")}")
 
                 Catch connEx As Exception
-                    status.Add(connection.Name, String.Format("Erro: {0}", connEx.Message))
-                    LogErros.RegistrarErro(connEx, String.Format("PowerQueryManager.VerificarStatusConexoes - Erro na conexão {0}", connection.Name))
+                    status.Add(connection.Name, $"Erro: {connEx.Message}")
+                    LogErros.RegistrarErro(connEx, $"PowerQueryManager.VerificarStatusConexoes - Erro na conexão {connection.Name}")
                 End Try
             Next
 
-            LogErros.RegistrarInfo(String.Format("Status verificado para {0} conexões", status.Count), "PowerQueryManager.VerificarStatusConexoes")
+            LogErros.RegistrarInfo($"Status verificado para {status.Count} conexões", "PowerQueryManager.VerificarStatusConexoes")
             Return status
 
         Catch ex As Exception
@@ -344,7 +365,7 @@ Public Class PowerQueryManager
             Return info
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, String.Format("PowerQueryManager.ObterInformacoesTabela({0})", nomeTabela))
+            LogErros.RegistrarErro(ex, $"PowerQueryManager.ObterInformacoesTabela({nomeTabela})")
             Return New Dictionary(Of String, Object)()
         End Try
     End Function

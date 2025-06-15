@@ -1,123 +1,93 @@
 ﻿Imports System.Drawing
+Imports System.Threading
+Imports System.Threading.Tasks
 Imports System.Windows.Forms
+Imports WinFormsApp = System.Windows.Forms.Application
 
 Public Class MainForm
     Private ucReposicaoEstoque As UcReposicaoEstoque
-    Private timerStatusBar As Timer
+    Private timerStatusBar As System.Windows.Forms.Timer
     Private moduloAtual As String = ""
     Private isClosingControlled As Boolean = False
     Private isDisposing As Boolean = False
     Private WithEvents btnTestes As Button
+    Private carregamentoInicial As Boolean = True
 
     Public Sub New()
         InitializeComponent()
         ConfigurarFormulario()
         InicializarStatusBar()
-        CarregarUserControlInicial()
+        ' NÃO carregar UserControl inicial aqui - será carregado sob demanda
     End Sub
 
     Private Sub ConfigurarFormulario()
         Try
-            ' Configurações do formulário
+            ' Configurações básicas e rápidas
             Me.Text = "Gestão de Estoque - Difemaq"
             Me.Size = New Size(1400, 900)
             Me.StartPosition = FormStartPosition.CenterScreen
             Me.WindowState = FormWindowState.Maximized
             Me.MinimumSize = New Size(1200, 800)
-
-            ' Configurações de exibição
             Me.ShowInTaskbar = True
             Me.KeyPreview = True
 
-            ' Configurar evento de teclas para atalhos
+            ' Configurar evento de teclas
             AddHandler Me.KeyDown, AddressOf MainForm_KeyDown
 
-            LogErros.RegistrarInfo("Formulário principal configurado", "MainForm.ConfigurarFormulario")
-
-            ' Criar botão de testes programaticamente
+            ' Criar botão de testes
             CriarBotaoTestes()
 
-            LogErros.RegistrarInfo("Formulário principal configurado", "MainForm.ConfigurarFormulario")
+            LogErros.RegistrarInfo("Formulário principal configurado rapidamente", "MainForm.ConfigurarFormulario")
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.ConfigurarFormulario")
         End Try
     End Sub
 
-    Private Sub CriarBotaoTestes()
-        Try
-            ' Criar o botão
-            btnTestes = New Button()
-
-            ' Configurar propriedades
-            With btnTestes
-                .Name = "btnTestes"
-                .Text = "🧪 Testes"
-                .Size = New Size(100, 40)
-                .Location = New Point(430, 10)
-                .BackColor = Color.Transparent
-                .FlatStyle = FlatStyle.Flat
-                .Font = New Font("Segoe UI", 10.0!, FontStyle.Bold)
-                .TabIndex = 3
-                .UseVisualStyleBackColor = False
-                .Visible = False ' Oculto por padrão
-
-                ' Configurar aparência do botão flat
-                With .FlatAppearance
-                    .BorderSize = 0
-                End With
-            End With
-
-            ' Adicionar ao painel de menu
-            If pnlMenu IsNot Nothing Then
-                pnlMenu.Controls.Add(btnTestes)
-            End If
-
-            ' Adicionar o manipulador de eventos
-            AddHandler btnTestes.Click, AddressOf btnTestes_Click
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.CriarBotaoTestes")
-        End Try
-    End Sub
-
-    Private Sub InicializarStatusBar()
-        Try
-            ' Configurar timer para atualizar data/hora
-            timerStatusBar = New Timer()
-            timerStatusBar.Interval = 1000 ' 1 segundo
-            AddHandler timerStatusBar.Tick, AddressOf TimerStatusBar_Tick
-            timerStatusBar.Start()
-
-            ' Atualizar status inicial
-            AtualizarStatus("Sistema iniciado - Pronto para uso")
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.InicializarStatusBar")
-        End Try
-    End Sub
-
+    ' Carregar UserControl apenas quando solicitado (lazy loading)
     Private Sub CarregarUserControlInicial()
         Try
-            ' Carregar UserControl de Reposição de Estoque como padrão
-            CarregarUserControl(GetType(UcReposicaoEstoque))
-            HighlightButtonMenu(btnReposicaoEstoque)
-            moduloAtual = "Reposição de Estoque"
+            If carregamentoInicial Then
+                carregamentoInicial = False
+
+                ' Mostrar mensagem de carregamento
+                AtualizarStatus("Carregando módulo de Reposição de Estoque...")
+
+                ' Carregar em background para não travar a UI
+                Task.Run(Sub()
+                             Try
+                                 Me.Invoke(Sub()
+                                               CarregarUserControl(GetType(UcReposicaoEstoque))
+                                               HighlightButtonMenu(btnReposicaoEstoque)
+                                               moduloAtual = "Reposição de Estoque"
+                                               AtualizarStatus("Sistema pronto")
+                                           End Sub)
+                             Catch ex As Exception
+                                 LogErros.RegistrarErro(ex, "MainForm.CarregarUserControlInicial.Background")
+                                 Me.Invoke(Sub()
+                                               AtualizarStatus("Erro ao carregar módulo")
+                                               MessageBox.Show($"Erro ao carregar interface inicial: {ex.Message}",
+                                                             "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                                           End Sub)
+                             End Try
+                         End Sub)
+            End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.CarregarUserControlInicial")
-            MessageBox.Show(String.Format("Erro ao carregar interface inicial: {0}", ex.Message), "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
     Public Sub CarregarUserControl(tipoUserControl As Type)
         Try
-            ' Verificar se está em processo de fechamento
             If isDisposing OrElse Me.IsDisposed Then Return
 
-            ' Mostrar indicador de carregamento
-            AtualizarStatus("Carregando módulo...")
-            Me.Cursor = Cursors.WaitCursor
+            ' Mostrar cursor de carregamento apenas se necessário
+            Dim mostrarCursor = pnlConteudo.Controls.Count > 0
+            If mostrarCursor Then
+                Me.Cursor = Cursors.WaitCursor
+                AtualizarStatus("Carregando módulo...")
+            End If
 
             ' Limpar painel atual
             LimparPainelConteudo()
@@ -138,112 +108,207 @@ Public Class MainForm
                 ucReposicaoEstoque = CType(novoUserControl, UcReposicaoEstoque)
             End If
 
-            ' Forçar redesenho
-            pnlConteudo.Refresh()
-            Me.Refresh()
+            ' Forçar redesenho apenas se necessário
+            If mostrarCursor Then
+                pnlConteudo.Refresh()
+                Me.Refresh()
+            End If
 
-            LogErros.RegistrarInfo(String.Format("UserControl carregado: {0}", tipoUserControl.Name), "MainForm.CarregarUserControl")
+            LogErros.RegistrarInfo($"UserControl carregado: {tipoUserControl.Name}", "MainForm.CarregarUserControl")
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, String.Format("MainForm.CarregarUserControl({0})", tipoUserControl.Name))
-            MessageBox.Show(String.Format("Erro ao carregar módulo: {0}", ex.Message), "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            LogErros.RegistrarErro(ex, $"MainForm.CarregarUserControl({tipoUserControl.Name})")
+            MessageBox.Show($"Erro ao carregar módulo: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             Me.Cursor = Cursors.Default
-            AtualizarStatus("Pronto")
+            If pnlConteudo.Controls.Count > 0 Then
+                AtualizarStatus("Pronto")
+            End If
         End Try
     End Sub
 
+    Private Sub btnReposicaoEstoque_Click(sender As Object, e As EventArgs) Handles btnReposicaoEstoque.Click
+        Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+
+            ' Carregar inicial se necessário
+            If carregamentoInicial Then
+                CarregarUserControlInicial()
+                Return
+            End If
+
+            ' Apenas carregar se não for o módulo atual
+            If moduloAtual <> "Reposição de Estoque" Then
+                AtualizarStatus("Carregando Reposição de Estoque...")
+                HighlightButtonMenu(btnReposicaoEstoque)
+                CarregarUserControl(GetType(UcReposicaoEstoque))
+                moduloAtual = "Reposição de Estoque"
+                AtualizarStatus("Módulo Reposição de Estoque carregado")
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.btnReposicaoEstoque_Click")
+            AtualizarStatus("Erro ao carregar módulo")
+        End Try
+    End Sub
+
+    ' Resto dos métodos permanecem iguais, mas otimizados onde possível...
+
     Private Sub LimparPainelConteudo()
         Try
-            ' Verificar se o painel ainda existe
             If pnlConteudo Is Nothing OrElse pnlConteudo.IsDisposed Then Return
 
-            ' Limpar controles existentes
-            For Each control As Control In pnlConteudo.Controls.Cast(Of Control).ToArray()
-                If TypeOf control Is UserControl Then
-                    control.Dispose()
-                End If
-                pnlConteudo.Controls.Remove(control)
-            Next
+            ' Suspender layout para melhor performance
+            pnlConteudo.SuspendLayout()
 
-            ' Limpar referências
-            ucReposicaoEstoque = Nothing
+            Try
+                ' Limpar controles de forma otimizada
+                For Each control As Control In pnlConteudo.Controls.Cast(Of Control).ToArray()
+                    If TypeOf control Is UserControl Then
+                        control.Dispose()
+                    End If
+                    pnlConteudo.Controls.Remove(control)
+                Next
+
+                ucReposicaoEstoque = Nothing
+
+            Finally
+                pnlConteudo.ResumeLayout(True)
+            End Try
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.LimparPainelConteudo")
         End Try
     End Sub
 
-    Private Sub MainForm_KeyDown(sender As Object, e As KeyEventArgs)
+    Private Sub InicializarStatusBar()
         Try
-            ' Verificar se está em processo de fechamento
-            If isDisposing OrElse Me.IsDisposed Then Return
+            ' Timer otimizado para status bar
+            timerStatusBar = New System.Windows.Forms.Timer()
+            timerStatusBar.Interval = 1000
+            AddHandler timerStatusBar.Tick, AddressOf TimerStatusBar_Tick
+            timerStatusBar.Start()
 
-            ' Atalhos de teclado
-            If e.Control Then
-                Select Case e.KeyCode
-                    Case Keys.F5
-                        ' Ctrl+F5 - Atualizar dados
-                        If ucReposicaoEstoque IsNot Nothing Then
-                            AtualizarStatus("Atualizando dados via atalho...")
-                        End If
-                    Case Keys.Q
-                        ' Ctrl+Q - Fechar aplicação
-                        FecharAplicacaoSegura()
-                    Case Keys.D1
-                        ' Ctrl+1 - Ir para Reposição de Estoque
-                        If btnReposicaoEstoque IsNot Nothing AndAlso Not btnReposicaoEstoque.IsDisposed Then
-                            btnReposicaoEstoque.PerformClick()
-                        End If
-                    Case Keys.D2
-                        ' Ctrl+2 - Ir para Relatórios
-                        If btnRelatorios IsNot Nothing AndAlso Not btnRelatorios.IsDisposed Then
-                            btnRelatorios.PerformClick()
-                        End If
-                    Case Keys.D3
-                        ' Ctrl+3 - Ir para Configurações
-                        If btnConfiguracoes IsNot Nothing AndAlso Not btnConfiguracoes.IsDisposed Then
-                            btnConfiguracoes.PerformClick()
-                        End If
-                    Case Keys.T
-                        ' Ctrl+T - Mostrar/Ocultar botão de testes
-                        If btnTestes IsNot Nothing AndAlso Not btnTestes.IsDisposed Then
-                            btnTestes.Visible = Not btnTestes.Visible
-                            If btnTestes.Visible Then
-                                AtualizarStatus("Modo de desenvolvimento ativado")
-                            End If
-                        End If
-                End Select
-            End If
-
-            ' F1 - Ajuda
-            If e.KeyCode = Keys.F1 Then
-                MostrarAjuda()
-            End If
+            AtualizarStatus("Sistema inicializado - Clique em 'Reposição Estoque' para começar")
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.MainForm_KeyDown")
+            LogErros.RegistrarErro(ex, "MainForm.InicializarStatusBar")
         End Try
     End Sub
 
-    Private Sub MostrarAjuda()
+    Private Sub TimerStatusBar_Tick(sender As Object, e As EventArgs)
         Try
-            Dim ajuda As String = String.Format("Atalhos de Teclado:{0}{0}Ctrl+1 - Reposição de Estoque{0}Ctrl+2 - Relatórios{0}Ctrl+3 - Configurações{0}Ctrl+F5 - Atualizar dados{0}Ctrl+Q - Fechar aplicação{0}F1 - Esta ajuda{0}{0}Navegação:{0}• Use os botões do menu superior para navegar entre módulos{0}• Clique duplo em produtos para ver detalhes{0}• Use o filtro para localizar produtos rapidamente", Environment.NewLine)
+            If isDisposing OrElse Me.IsDisposed Then Return
 
-            MessageBox.Show(ajuda, "Ajuda - Gestão de Estoque Difemaq", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            If lblDataHora IsNot Nothing AndAlso Not lblDataHora.IsDisposed Then
+                lblDataHora.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.TimerStatusBar_Tick")
+        End Try
+    End Sub
+
+    Public Sub AtualizarStatus(mensagem As String)
+        Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+
+            If lblStatus IsNot Nothing AndAlso Not lblStatus.IsDisposed Then
+                lblStatus.Text = mensagem
+            End If
+
+            ' Processar eventos apenas se necessário
+            If Not carregamentoInicial Then
+                WinFormsApp.DoEvents()
+            End If
+
+            LogErros.RegistrarInfo($"Status atualizado: {mensagem}", "MainForm.AtualizarStatus")
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.MostrarAjuda")
+            LogErros.RegistrarErro(ex, "MainForm.AtualizarStatus")
+        End Try
+    End Sub
+
+    Private Sub CriarBotaoTestes()
+        Try
+            btnTestes = New Button()
+
+            With btnTestes
+                .Name = "btnTestes"
+                .Text = "🧪 Testes"
+                .Size = New Size(100, 40)
+                .Location = New Point(430, 10)
+                .BackColor = Color.Transparent
+                .FlatStyle = FlatStyle.Flat
+                .Font = New Font("Segoe UI", 10.0!, FontStyle.Bold)
+                .TabIndex = 3
+                .UseVisualStyleBackColor = False
+                .Visible = False
+
+                With .FlatAppearance
+                    .BorderSize = 0
+                End With
+            End With
+
+            If pnlMenu IsNot Nothing Then
+                pnlMenu.Controls.Add(btnTestes)
+            End If
+
+            AddHandler btnTestes.Click, AddressOf btnTestes_Click
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.CriarBotaoTestes")
+        End Try
+    End Sub
+
+    ' Métodos de controle de janela otimizados
+    Private Sub btnMinimizar_Click(sender As Object, e As EventArgs) Handles btnMinimizar.Click
+        Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+            Me.WindowState = FormWindowState.Minimized
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.btnMinimizar_Click")
+        End Try
+    End Sub
+
+    Private Sub btnMaximizar_Click(sender As Object, e As EventArgs) Handles btnMaximizar.Click
+        Try
+            If isDisposing OrElse Me.IsDisposed Then Return
+            If btnMaximizar Is Nothing OrElse btnMaximizar.IsDisposed Then Return
+
+            If Me.WindowState = FormWindowState.Maximized Then
+                Me.WindowState = FormWindowState.Normal
+                btnMaximizar.Text = "□"
+            Else
+                Me.WindowState = FormWindowState.Maximized
+                btnMaximizar.Text = "❐"
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.btnMaximizar_Click")
+        End Try
+    End Sub
+
+    Private Sub btnFechar_Click(sender As Object, e As EventArgs) Handles btnFechar.Click
+        Try
+            FecharAplicacaoSegura()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.btnFechar_Click")
+        End Try
+    End Sub
+
+    Private Sub FecharAplicacaoSegura()
+        Try
+            isClosingControlled = True
+            isDisposing = True
+            Me.Close()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.FecharAplicacaoSegura")
         End Try
     End Sub
 
     Private Sub MainForm_FormClosing(sender As Object, e As FormClosingEventArgs) Handles Me.FormClosing
         Try
-            ' Marcar que está em processo de fechamento
             isDisposing = True
 
             If Not isClosingControlled Then
-                ' Confirmar fechamento apenas se não foi controlado
                 Dim resultado As DialogResult = MessageBox.Show(
                     "Deseja realmente fechar o sistema?",
                     "Confirmar Fechamento",
@@ -252,16 +317,14 @@ Public Class MainForm
                     MessageBoxDefaultButton.Button2)
 
                 If resultado = DialogResult.No Then
-                    isDisposing = False ' Cancelar processo de fechamento
+                    isDisposing = False
                     e.Cancel = True
                     Return
                 End If
             End If
 
-            ' Limpar recursos
             LimparRecursos()
 
-            ' Fechar workbook Excel de forma controlada
             Try
                 If Globals.ThisWorkbook IsNot Nothing Then
                     Dim thisWb As ThisWorkbook = CType(Globals.ThisWorkbook, ThisWorkbook)
@@ -278,39 +341,16 @@ Public Class MainForm
         End Try
     End Sub
 
-    Public Sub FecharControlado()
-        ' Método para fechar o formulário sem confirmação
-        Try
-            isClosingControlled = True
-            isDisposing = True
-            Me.Close()
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.FecharControlado")
-        End Try
-    End Sub
-
-    Private Sub FecharAplicacaoSegura()
-        Try
-            isClosingControlled = True
-            isDisposing = True
-            Me.Close()
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.FecharAplicacaoSegura")
-        End Try
-    End Sub
-
     Private Sub LimparRecursos()
         Try
             LogErros.RegistrarInfo("Limpando recursos do MainForm", "MainForm.LimparRecursos")
 
-            ' Parar timer
             If timerStatusBar IsNot Nothing Then
                 timerStatusBar.Stop()
                 timerStatusBar.Dispose()
                 timerStatusBar = Nothing
             End If
 
-            ' Limpar UserControls
             LimparPainelConteudo()
 
             LogErros.RegistrarInfo("Recursos do MainForm limpos", "MainForm.LimparRecursos")
@@ -320,60 +360,7 @@ Public Class MainForm
         End Try
     End Sub
 
-    Private Sub TimerStatusBar_Tick(sender As Object, e As EventArgs)
-        Try
-            ' Verificar se está em processo de fechamento
-            If isDisposing OrElse Me.IsDisposed Then Return
-
-            ' Verificar se o label ainda existe
-            If lblDataHora IsNot Nothing AndAlso Not lblDataHora.IsDisposed Then
-                lblDataHora.Text = DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
-            End If
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.TimerStatusBar_Tick")
-        End Try
-    End Sub
-
-    Public Sub AtualizarStatus(mensagem As String)
-        Try
-            ' Verificar se está em processo de fechamento
-            If isDisposing OrElse Me.IsDisposed Then Return
-
-            ' Verificar se os controles ainda existem
-            If lblStatus IsNot Nothing AndAlso Not lblStatus.IsDisposed Then
-                lblStatus.Text = mensagem
-            End If
-
-            If StatusStrip IsNot Nothing AndAlso Not StatusStrip.IsDisposed Then
-                StatusStrip.Refresh()
-            End If
-
-            System.Windows.Forms.Application.DoEvents()
-
-            LogErros.RegistrarInfo(String.Format("Status atualizado: {0}", mensagem), "MainForm.AtualizarStatus")
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.AtualizarStatus")
-        End Try
-    End Sub
-
-    Private Sub btnReposicaoEstoque_Click(sender As Object, e As EventArgs) Handles btnReposicaoEstoque.Click
-        Try
-            If isDisposing OrElse Me.IsDisposed Then Return
-
-            If moduloAtual <> "Reposição de Estoque" Then
-                AtualizarStatus("Carregando Reposição de Estoque...")
-                HighlightButtonMenu(btnReposicaoEstoque)
-                CarregarUserControl(GetType(UcReposicaoEstoque))
-                moduloAtual = "Reposição de Estoque"
-                AtualizarStatus("Módulo Reposição de Estoque carregado")
-            End If
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.btnReposicaoEstoque_Click")
-            AtualizarStatus("Erro ao carregar módulo")
-        End Try
-    End Sub
-
+    ' Eventos de menu otimizados
     Private Sub btnRelatorios_Click(sender As Object, e As EventArgs) Handles btnRelatorios.Click
         Try
             If isDisposing OrElse Me.IsDisposed Then Return
@@ -381,16 +368,23 @@ Public Class MainForm
             AtualizarStatus("Módulo de Relatórios em desenvolvimento...")
             HighlightButtonMenu(btnRelatorios)
 
-            Dim mensagem As String = String.Format("Módulo de Relatórios{0}{0}Funcionalidades planejadas:{0}• Relatório de estoque baixo{0}• Análise de vendas por período{0}• Histórico de compras{0}• Gráficos de movimentação{0}• Exportação para Excel/PDF{0}{0}Será implementado em versão futura.", Environment.NewLine)
+            ' Não travar a UI com MessageBox longo
+            Task.Run(Sub()
+                         Thread.Sleep(100) ' Pequena pausa para UI responder
+                         Me.Invoke(Sub()
+                                       Dim mensagem = $"Módulo de Relatórios{Environment.NewLine}{Environment.NewLine}Funcionalidades planejadas:{Environment.NewLine}• Relatório de estoque baixo{Environment.NewLine}• Análise de vendas por período{Environment.NewLine}• Histórico de compras{Environment.NewLine}• Gráficos de movimentação{Environment.NewLine}• Exportação para Excel/PDF{Environment.NewLine}{Environment.NewLine}Será implementado em versão futura."
 
-            MessageBox.Show(mensagem, "Relatórios - Em Desenvolvimento", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                                       MessageBox.Show(mensagem, "Relatórios - Em Desenvolvimento",
+                                                     MessageBoxButtons.OK, MessageBoxIcon.Information)
 
-            ' Voltar para o módulo anterior
-            If moduloAtual = "Reposição de Estoque" Then
-                HighlightButtonMenu(btnReposicaoEstoque)
-            End If
+                                       If moduloAtual = "Reposição de Estoque" Then
+                                           HighlightButtonMenu(btnReposicaoEstoque)
+                                       End If
 
-            AtualizarStatus("Pronto")
+                                       AtualizarStatus("Pronto")
+                                   End Sub)
+                     End Sub)
+
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.btnRelatorios_Click")
         End Try
@@ -403,16 +397,22 @@ Public Class MainForm
             AtualizarStatus("Módulo de Configurações em desenvolvimento...")
             HighlightButtonMenu(btnConfiguracoes)
 
-            Dim mensagem As String = String.Format("Módulo de Configurações{0}{0}Funcionalidades planejadas:{0}• Configuração de conexões Power Query{0}• Personalização de interface{0}• Configuração de caminhos de arquivos{0}• Backup e restauração{0}• Logs do sistema{0}{0}Será implementado em versão futura.", Environment.NewLine)
+            Task.Run(Sub()
+                         Thread.Sleep(100)
+                         Me.Invoke(Sub()
+                                       Dim mensagem = $"Módulo de Configurações{Environment.NewLine}{Environment.NewLine}Funcionalidades planejadas:{Environment.NewLine}• Configuração de conexões Power Query{Environment.NewLine}• Personalização de interface{Environment.NewLine}• Configuração de caminhos de arquivos{Environment.NewLine}• Backup e restauração{Environment.NewLine}• Logs do sistema{Environment.NewLine}{Environment.NewLine}Será implementado em versão futura."
 
-            MessageBox.Show(mensagem, "Configurações - Em Desenvolvimento", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                                       MessageBox.Show(mensagem, "Configurações - Em Desenvolvimento",
+                                                     MessageBoxButtons.OK, MessageBoxIcon.Information)
 
-            ' Voltar para o módulo anterior
-            If moduloAtual = "Reposição de Estoque" Then
-                HighlightButtonMenu(btnReposicaoEstoque)
-            End If
+                                       If moduloAtual = "Reposição de Estoque" Then
+                                           HighlightButtonMenu(btnReposicaoEstoque)
+                                       End If
 
-            AtualizarStatus("Pronto")
+                                       AtualizarStatus("Pronto")
+                                   End Sub)
+                     End Sub)
+
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "MainForm.btnConfiguracoes_Click")
         End Try
@@ -423,7 +423,7 @@ Public Class MainForm
             If isDisposing OrElse Me.IsDisposed Then Return
             If pnlMenu Is Nothing OrElse pnlMenu.IsDisposed Then Return
 
-            ' Resetar cores de todos os botões
+            ' Resetar cores de forma otimizada
             For Each control As Control In pnlMenu.Controls
                 If TypeOf control Is Button AndAlso control IsNot botaoAtivo AndAlso Not control.IsDisposed Then
                     control.BackColor = Color.Transparent
@@ -444,41 +444,73 @@ Public Class MainForm
         End Try
     End Sub
 
-    Private Sub btnMinimizar_Click(sender As Object, e As EventArgs) Handles btnMinimizar.Click
+    Private Sub MainForm_KeyDown(sender As Object, e As KeyEventArgs)
         Try
             If isDisposing OrElse Me.IsDisposed Then Return
 
-            Me.WindowState = FormWindowState.Minimized
-            LogErros.RegistrarInfo("Janela minimizada", "MainForm.btnMinimizar_Click")
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.btnMinimizar_Click")
-        End Try
-    End Sub
-
-    Private Sub btnMaximizar_Click(sender As Object, e As EventArgs) Handles btnMaximizar.Click
-        Try
-            If isDisposing OrElse Me.IsDisposed Then Return
-            If btnMaximizar Is Nothing OrElse btnMaximizar.IsDisposed Then Return
-
-            If Me.WindowState = FormWindowState.Maximized Then
-                Me.WindowState = FormWindowState.Normal
-                btnMaximizar.Text = "□"
-                LogErros.RegistrarInfo("Janela restaurada", "MainForm.btnMaximizar_Click")
-            Else
-                Me.WindowState = FormWindowState.Maximized
-                btnMaximizar.Text = "❐"
-                LogErros.RegistrarInfo("Janela maximizada", "MainForm.btnMaximizar_Click")
+            If e.Control Then
+                Select Case e.KeyCode
+                    Case Keys.F5
+                        If ucReposicaoEstoque IsNot Nothing Then
+                            AtualizarStatus("Atualizando dados via atalho...")
+                        End If
+                    Case Keys.Q
+                        FecharAplicacaoSegura()
+                    Case Keys.D1
+                        If btnReposicaoEstoque IsNot Nothing AndAlso Not btnReposicaoEstoque.IsDisposed Then
+                            btnReposicaoEstoque.PerformClick()
+                        End If
+                    Case Keys.D2
+                        If btnRelatorios IsNot Nothing AndAlso Not btnRelatorios.IsDisposed Then
+                            btnRelatorios.PerformClick()
+                        End If
+                    Case Keys.D3
+                        If btnConfiguracoes IsNot Nothing AndAlso Not btnConfiguracoes.IsDisposed Then
+                            btnConfiguracoes.PerformClick()
+                        End If
+                    Case Keys.T
+                        If btnTestes IsNot Nothing AndAlso Not btnTestes.IsDisposed Then
+                            btnTestes.Visible = Not btnTestes.Visible
+                            If btnTestes.Visible Then
+                                AtualizarStatus("Modo de desenvolvimento ativado")
+                            End If
+                        End If
+                End Select
             End If
+
+            If e.KeyCode = Keys.F1 Then
+                MostrarAjuda()
+            End If
+
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.btnMaximizar_Click")
+            LogErros.RegistrarErro(ex, "MainForm.MainForm_KeyDown")
         End Try
     End Sub
 
-    Private Sub btnFechar_Click(sender As Object, e As EventArgs) Handles btnFechar.Click
+    Private Sub MostrarAjuda()
         Try
-            FecharAplicacaoSegura()
+            Dim ajuda = $"Atalhos de Teclado:{Environment.NewLine}{Environment.NewLine}Ctrl+1 - Reposição de Estoque{Environment.NewLine}Ctrl+2 - Relatórios{Environment.NewLine}Ctrl+3 - Configurações{Environment.NewLine}Ctrl+F5 - Atualizar dados{Environment.NewLine}Ctrl+Q - Fechar aplicação{Environment.NewLine}F1 - Esta ajuda{Environment.NewLine}{Environment.NewLine}Navegação:{Environment.NewLine}• Use os botões do menu superior para navegar entre módulos{Environment.NewLine}• Clique duplo em produtos para ver detalhes{Environment.NewLine}• Use o filtro para localizar produtos rapidamente"
+
+            MessageBox.Show(ajuda, "Ajuda - Gestão de Estoque Difemaq", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.btnFechar_Click")
+            LogErros.RegistrarErro(ex, "MainForm.MostrarAjuda")
+        End Try
+    End Sub
+
+    Private Sub btnTestes_Click(sender As Object, e As EventArgs)
+        Try
+            AtualizarStatus("Abrindo módulo de testes...")
+
+            Dim testForm As New TestRunnerForm()
+            testForm.ShowDialog()
+
+            AtualizarStatus("Pronto")
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.btnTestes_Click")
+            MessageBox.Show($"Erro ao abrir testes: {ex.Message}", "Erro",
+                       MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
@@ -498,7 +530,17 @@ Public Class MainForm
         End Try
     End Sub
 
-    ' Propriedade para verificar se há dados carregados
+    Public Sub FecharControlado()
+        Try
+            isClosingControlled = True
+            isDisposing = True
+            Me.Close()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MainForm.FecharControlado")
+        End Try
+    End Sub
+
+    ' Propriedades otimizadas
     Public ReadOnly Property TemDadosCarregados As Boolean
         Get
             Try
@@ -509,7 +551,6 @@ Public Class MainForm
         End Get
     End Property
 
-    ' Método para obter informações do sistema
     Public Function ObterInformacoesSistema() As Dictionary(Of String, String)
         Try
             Dim info As New Dictionary(Of String, String)
@@ -526,22 +567,5 @@ Public Class MainForm
             Return New Dictionary(Of String, String)
         End Try
     End Function
-
-    Private Sub btnTestes_Click(sender As Object, e As EventArgs)
-        Try
-            AtualizarStatus("Abrindo módulo de testes...")
-
-            ' Mostrar interface de testes
-            Dim testForm As New TestRunnerForm()
-            testForm.ShowDialog()
-
-            AtualizarStatus("Pronto")
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "MainForm.btnTestes_Click")
-            MessageBox.Show($"Erro ao abrir testes: {ex.Message}", "Erro",
-                       MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
 
 End Class

@@ -225,6 +225,12 @@
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
     <Compile Include="PowerQueryManager.vb" />
+    <Compile Include="SplashForm.Designer.vb">
+      <DependentUpon>SplashForm.vb</DependentUpon>
+    </Compile>
+    <Compile Include="SplashForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Tests\TestFramework.vb" />
     <Compile Include="Tests\TestRunner.vb" />
     <Compile Include="ThisWorkbook.Designer.vb">
@@ -343,14 +349,14 @@
       <FlavorProperties GUID="{BAA0C2D2-18E2-41B9-852F-F413020CAA33}">
         <ProjectProperties HostName="Tratamento dos dados.xlsx" HostPackage="{3F2B7691-D1D1-402F-9370-2704A737CF60}" OfficeVersion="15.0" VstxVersion="4.0" ApplicationType="XLS" Language="VB" TemplatesPath="VSTOTemplates" DebugInfoExeName="C:\Program Files\Microsoft Office\root\Office16\excel.exe" DebugInfoCommandLine="/x &quot;[$OUTPUT]Tratamento dos dados.xlsx&quot;" />
         <Host Name="Excel Document" Path=".\Tratamento dos dados.xlsx">
-          <HostItem Name="Planilha1" Code="SheetEstoqueVisao.vb" CanonicalName="Planilha1" DisplayName="EstoqueVisao" Blueprint="SheetEstoqueVisao.Designer.xml" GeneratedCode="SheetEstoqueVisao.Designer.vb" />
           <HostItem Name="Planilha2" Code="Planilha2.vb" CanonicalName="Planilha2" DisplayName="Data últimos 2 anos" Blueprint="Planilha2.Designer.xml" GeneratedCode="Planilha2.Designer.vb" />
-          <HostItem Name="Planilha3" Code="SheetCompras.vb" CanonicalName="Planilha3" DisplayName="Compras" Blueprint="SheetCompras.Designer.xml" GeneratedCode="SheetCompras.Designer.vb" />
-          <HostItem Name="Planilha4" Code="SheetVendas.vb" CanonicalName="Planilha4" DisplayName="Vendas" Blueprint="SheetVendas.Designer.xml" GeneratedCode="SheetVendas.Designer.vb" />
           <HostItem Name="Planilha5" Code="Planilha5.vb" CanonicalName="Planilha5" DisplayName="Histórico de vendas" Blueprint="Planilha5.Designer.xml" GeneratedCode="Planilha5.Designer.vb" />
           <HostItem Name="Planilha6" Code="Planilha6.vb" CanonicalName="Planilha6" DisplayName="Histórico de compras" Blueprint="Planilha6.Designer.xml" GeneratedCode="Planilha6.Designer.vb" />
-          <HostItem Name="Planilha7" Code="SheetProdutos .vb" CanonicalName="Planilha7" DisplayName="Produtos" Blueprint="SheetProdutos .Designer.xml" GeneratedCode="SheetProdutos .Designer.vb" />
           <HostItem Name="Planilha8" Code="Planilha8.vb" CanonicalName="Planilha8" DisplayName="ProdutosManual" Blueprint="Planilha8.Designer.xml" GeneratedCode="Planilha8.Designer.vb" />
+          <HostItem Name="Planilha3" Code="SheetCompras.vb" CanonicalName="Planilha3" DisplayName="Compras" Blueprint="SheetCompras.Designer.xml" GeneratedCode="SheetCompras.Designer.vb" />
+          <HostItem Name="Planilha1" Code="SheetEstoqueVisao.vb" CanonicalName="Planilha1" DisplayName="EstoqueVisao" Blueprint="SheetEstoqueVisao.Designer.xml" GeneratedCode="SheetEstoqueVisao.Designer.vb" />
+          <HostItem Name="Planilha7" Code="SheetProdutos .vb" CanonicalName="Planilha7" DisplayName="Produtos" Blueprint="SheetProdutos .Designer.xml" GeneratedCode="SheetProdutos .Designer.vb" />
+          <HostItem Name="Planilha4" Code="SheetVendas.vb" CanonicalName="Planilha4" DisplayName="Vendas" Blueprint="SheetVendas.Designer.xml" GeneratedCode="SheetVendas.Designer.vb" />
           <HostItem Name="ThisWorkbook" Code="ThisWorkbook.vb" CanonicalName="ThisWorkbook" Blueprint="ThisWorkbook.Designer.xml" GeneratedCode="ThisWorkbook.Designer.vb" />
         </Host>
       </FlavorProperties>

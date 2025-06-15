@@ -38,6 +38,11 @@ Public Class ConfiguracaoApp
     Public Const MSG_IMAGEM_NAO_ENCONTRADA As String = "Imagem não disponível"
     Public Const MSG_DADOS_CARREGANDO As String = "Carregando dados..."
 
+    ' Em ConfiguracaoApp.vb - adicionar:
+    Public Const CACHE_TIMEOUT_MINUTES As Integer = 5
+    Public Const DEBOUNCE_DELAY_MS As Integer = 100
+    Public Const POWERQUERY_TIMEOUT_MAX As Integer = 20
+
     ' Métodos auxiliares para cores
     Public Shared Function ObterCorHeader() As Color
         Return ColorTranslator.FromHtml(COR_HEADER_GRID)
