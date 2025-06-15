@@ -23,18 +23,13 @@ Public Class ThisWorkbook
         Try
             LogErros.RegistrarInfo("Iniciando aplicação GestãoEstoqueDifemaq", "ThisWorkbook.ThisWorkbook_Startup")
 
-            ' Tentar criar splash - se falhar, continuar sem
-            Try
-                splash = New SplashForm()
-                splash.DefinirVersao("1.0.0")
-                splash.Show()
+            ' Usar método estático otimizado
+            splash = SplashForm.MostrarSplashAsync("1.0.0")
+
+            If splash IsNot Nothing Then
                 splash.AtualizarStatus("Iniciando sistema...", 0)
-                Application.DoEvents()
                 Thread.Sleep(300)
-            Catch splashEx As Exception
-                LogErros.RegistrarErro(splashEx, "ThisWorkbook.ThisWorkbook_Startup - Erro no splash")
-                splash = Nothing ' Continuar sem splash
-            End Try
+            End If
 
             ' Configurar eventos da aplicação
             If splash IsNot Nothing Then splash.AtualizarStatus("Configurando eventos...", 15)
