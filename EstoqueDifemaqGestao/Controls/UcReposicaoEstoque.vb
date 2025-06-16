@@ -723,18 +723,70 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
-    ' Carregamento assíncrono de imagem otimizado
+    ' Carregamento assíncrono de imagem otimizado - COM CACHE DE IMAGENS
     Private Sub CarregarImagemProdutoAsync(codigoProduto As String)
         If isCarregandoImagem Then Return
 
         Try
+            ' ✅ VERIFICAR CACHE DE IMAGEM PRIMEIRO
+            If cacheImagens.ContainsKey(codigoProduto) Then
+                ' Imagem já está no cache - aplicar imediatamente
+                Try
+                    If pbProduto.Image IsNot Nothing Then
+                        pbProduto.Image.Dispose()
+                        pbProduto.Image = Nothing
+                    End If
+
+                    Dim imagemCache = cacheImagens(codigoProduto)
+                    If imagemCache IsNot Nothing Then
+                        ' Criar uma cópia da imagem para evitar problemas de referência
+                        pbProduto.Image = New Bitmap(imagemCache)
+                        grpImagem.Text = "🖼️ Imagem do Produto"
+                        LogErros.RegistrarInfo($"📸 Imagem aplicada do cache: {codigoProduto}", "CarregarImagem")
+                    Else
+                        pbProduto.Image = Nothing
+                        grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+                    End If
+                    Return
+                Catch cacheEx As Exception
+                    LogErros.RegistrarErro(cacheEx, "CarregarImagemProdutoAsync - Cache")
+                    ' Continue para carregamento normal se cache falhar
+                End Try
+            End If
+
+            ' ✅ VERIFICAR STATUS CACHE - se já tentou carregar antes
+            If cacheStatusImagens.ContainsKey(codigoProduto) Then
+                Dim status = cacheStatusImagens(codigoProduto)
+                If status = "NAO_ENCONTRADA" Then
+                    ' Já tentou e não encontrou - não tentar novamente
+                    pbProduto.Image = Nothing
+                    grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+                    LogErros.RegistrarInfo($"⚠️ Status cache: imagem não disponível para {codigoProduto}", "CarregarImagem")
+                    Return
+                ElseIf status = "ERRO" Then
+                    ' Já tentou e deu erro - não tentar novamente
+                    pbProduto.Image = Nothing
+                    grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+                    LogErros.RegistrarInfo($"❌ Status cache: erro anterior para {codigoProduto}", "CarregarImagem")
+                    Return
+                End If
+            End If
+
             isCarregandoImagem = True
-            grpImagem.Text = "🖼️ Imagem do Produto - Carregando..."
+
+            ' ✅ Atualizar UI no thread principal
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() grpImagem.Text = "🖼️ Imagem do Produto - Carregando...")
+            Else
+                grpImagem.Text = "🖼️ Imagem do Produto - Carregando..."
+            End If
 
             Task.Run(Sub()
                          Try
                              Dim imagemEncontrada As Boolean = False
                              Dim imagemCarregada As Image = Nothing
+                             Dim caminhoEncontrado As String = ""
+                             Dim errosDetalhes As New List(Of String)
 
                              ' Procurar imagem com diferentes extensões
                              For Each extensao As String In ConfiguracaoApp.EXTENSOES_IMAGEM
@@ -743,40 +795,104 @@ Public Class UcReposicaoEstoque
                                  If File.Exists(caminhoImagem) Then
                                      Try
                                          Dim fileInfo As New FileInfo(caminhoImagem)
-                                         If fileInfo.Length <= ConfiguracaoApp.TAMANHO_MAXIMO_IMAGEM Then
-                                             Using fs As New FileStream(caminhoImagem, FileMode.Open, FileAccess.Read)
-                                                 imagemCarregada = Image.FromStream(fs)
-                                             End Using
-                                             imagemEncontrada = True
-                                             Exit For
+
+                                         ' Validações de tamanho
+                                         If fileInfo.Length = 0 Then
+                                             errosDetalhes.Add($"{extensao}: arquivo vazio")
+                                             Continue For
                                          End If
-                                     Catch
+
+                                         If fileInfo.Length < 100 Then
+                                             errosDetalhes.Add($"{extensao}: arquivo muito pequeno ({fileInfo.Length} bytes)")
+                                             Continue For
+                                         End If
+
+                                         If fileInfo.Length > ConfiguracaoApp.TAMANHO_MAXIMO_IMAGEM Then
+                                             errosDetalhes.Add($"{extensao}: arquivo muito grande ({fileInfo.Length / 1024:F0}KB)")
+                                             Continue For
+                                         End If
+
+                                         ' Tentar carregar imagem
+                                         imagemCarregada = TentarCarregarImagem(caminhoImagem)
+
+                                         If imagemCarregada IsNot Nothing Then
+                                             caminhoEncontrado = caminhoImagem
+                                             imagemEncontrada = True
+                                             LogErros.RegistrarInfo($"✅ Imagem carregada: {caminhoImagem} ({fileInfo.Length / 1024:F0}KB)", "CarregarImagem")
+                                             Exit For
+                                         Else
+                                             errosDetalhes.Add($"{extensao}: formato inválido")
+                                         End If
+
+                                     Catch imgEx As Exception
+                                         errosDetalhes.Add($"{extensao}: {imgEx.Message}")
+                                         LogErros.RegistrarErro(imgEx, $"Erro ao carregar {caminhoImagem}")
                                          Continue For
                                      End Try
+                                 Else
+                                     errosDetalhes.Add($"{extensao}: arquivo não existe")
                                  End If
                              Next
 
-                             ' Atualizar UI no thread principal
-                             Me.Invoke(Sub()
-                                           If pbProduto.Image IsNot Nothing Then
-                                               pbProduto.Image.Dispose()
-                                               pbProduto.Image = Nothing
-                                           End If
+                             ' ✅ ARMAZENAR NO CACHE
+                             If imagemEncontrada Then
+                                 cacheImagens(codigoProduto) = imagemCarregada
+                                 cacheStatusImagens(codigoProduto) = "ENCONTRADA"
+                             Else
+                                 cacheImagens(codigoProduto) = Nothing
+                                 cacheStatusImagens(codigoProduto) = "NAO_ENCONTRADA"
+                                 LogErros.RegistrarInfo($"❌ Nenhuma imagem válida para {codigoProduto}: {String.Join("; ", errosDetalhes)}", "CarregarImagem")
+                             End If
 
-                                           If imagemEncontrada AndAlso imagemCarregada IsNot Nothing Then
-                                               pbProduto.Image = imagemCarregada
-                                               grpImagem.Text = "🖼️ Imagem do Produto"
-                                           Else
-                                               grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
-                                           End If
+                             ' ✅ Atualizar UI
+                             If Me.IsDisposed OrElse Me.Disposing Then Return
+
+                             Me.Invoke(Sub()
+                                           Try
+                                               If Me.IsDisposed OrElse pbProduto.IsDisposed Then Return
+
+                                               ' Limpar imagem anterior
+                                               If pbProduto.Image IsNot Nothing Then
+                                                   pbProduto.Image.Dispose()
+                                                   pbProduto.Image = Nothing
+                                               End If
+
+                                               If imagemEncontrada AndAlso imagemCarregada IsNot Nothing Then
+                                                   ' Criar cópia da imagem para o PictureBox
+                                                   pbProduto.Image = New Bitmap(imagemCarregada)
+                                                   grpImagem.Text = "🖼️ Imagem do Produto"
+                                                   LogErros.RegistrarInfo($"📸 Imagem aplicada com sucesso: {caminhoEncontrado}", "CarregarImagem")
+                                               Else
+                                                   pbProduto.Image = Nothing
+                                                   grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+                                                   LogErros.RegistrarInfo($"⚠️ Nenhuma imagem encontrada para: {codigoProduto}", "CarregarImagem")
+                                               End If
+
+                                           Catch uiEx As Exception
+                                               LogErros.RegistrarErro(uiEx, "CarregarImagemProdutoAsync - UI Update")
+                                               grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+                                               cacheStatusImagens(codigoProduto) = "ERRO"
+                                           End Try
                                        End Sub)
 
                          Catch ex As Exception
                              LogErros.RegistrarErro(ex, $"UcReposicaoEstoque.CarregarImagemProdutoAsync({codigoProduto})")
-                             Me.Invoke(Sub()
-                                           pbProduto.Image = Nothing
-                                           grpImagem.Text = "🖼️ Imagem do Produto - Erro"
-                                       End Sub)
+                             cacheStatusImagens(codigoProduto) = "ERRO"
+
+                             If Not Me.IsDisposed Then
+                                 Try
+                                     Me.Invoke(Sub()
+                                                   If Not pbProduto.IsDisposed Then
+                                                       pbProduto.Image = Nothing
+                                                   End If
+                                                   If Not grpImagem.IsDisposed Then
+                                                       grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+                                                   End If
+                                               End Sub)
+                                 Catch
+                                     ' Ignorar se não conseguir atualizar UI
+                                 End Try
+                             End If
                          Finally
                              isCarregandoImagem = False
                          End Try
@@ -785,9 +901,96 @@ Public Class UcReposicaoEstoque
         Catch ex As Exception
             LogErros.RegistrarErro(ex, $"UcReposicaoEstoque.CarregarImagemProdutoAsync({codigoProduto}) - Outer")
             isCarregandoImagem = False
-            grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+            cacheStatusImagens(codigoProduto) = "ERRO"
+            Try
+                grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+            Catch
+                ' Ignorar se não conseguir atualizar UI
+            End Try
         End Try
     End Sub
+
+    ' ✅ NOVO MÉTODO: Tentativa robusta de carregamento de imagem
+    Private Function TentarCarregarImagem(caminhoArquivo As String) As Image
+        Try
+            ' MÉTODO 1: Carregamento direto (mais simples)
+            Try
+                Using fs As New FileStream(caminhoArquivo, FileMode.Open, FileAccess.Read, FileShare.Read)
+                    ' Verificar se consegue ler pelo menos alguns bytes
+                    Dim buffer(10) As Byte
+                    If fs.Read(buffer, 0, 10) < 10 Then
+                        LogErros.RegistrarInfo($"❌ Arquivo muito pequeno para ser imagem: {caminhoArquivo}", "TentarCarregarImagem")
+                        Return Nothing
+                    End If
+
+                    ' Voltar ao início e tentar carregar
+                    fs.Seek(0, SeekOrigin.Begin)
+                    Return Image.FromStream(fs)
+                End Using
+            Catch ex As ArgumentException
+                LogErros.RegistrarInfo($"❌ Método 1 falhou (formato inválido): {caminhoArquivo} - {ex.Message}", "TentarCarregarImagem")
+            End Try
+
+            ' MÉTODO 2: Via array de bytes (mais robusto)
+            Try
+                Dim bytes() As Byte = File.ReadAllBytes(caminhoArquivo)
+
+                ' Validar header básico da imagem
+                If Not ValidarHeaderImagem(bytes) Then
+                    LogErros.RegistrarInfo($"❌ Header de imagem inválido: {caminhoArquivo}", "TentarCarregarImagem")
+                    Return Nothing
+                End If
+
+                Using ms As New MemoryStream(bytes)
+                    Return Image.FromStream(ms)
+                End Using
+            Catch ex As ArgumentException
+                LogErros.RegistrarInfo($"❌ Método 2 falhou (formato inválido): {caminhoArquivo} - {ex.Message}", "TentarCarregarImagem")
+            End Try
+
+            LogErros.RegistrarInfo($"❌ Todos os métodos falharam: {caminhoArquivo}", "TentarCarregarImagem")
+            Return Nothing
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, $"TentarCarregarImagem({caminhoArquivo})")
+            Return Nothing
+        End Try
+    End Function
+
+    ' ✅ NOVO MÉTODO: Validar header básico da imagem
+    Private Function ValidarHeaderImagem(bytes() As Byte) As Boolean
+        Try
+            If bytes Is Nothing OrElse bytes.Length < 10 Then Return False
+
+            ' Verificar headers conhecidos
+            ' JPEG: FF D8 FF
+            If bytes.Length >= 3 AndAlso bytes(0) = &HFF AndAlso bytes(1) = &HD8 AndAlso bytes(2) = &HFF Then
+                Return True
+            End If
+
+            ' PNG: 89 50 4E 47 0D 0A 1A 0A
+            If bytes.Length >= 8 AndAlso bytes(0) = &H89 AndAlso bytes(1) = &H50 AndAlso bytes(2) = &H4E AndAlso bytes(3) = &H47 Then
+                Return True
+            End If
+
+            ' BMP: 42 4D
+            If bytes.Length >= 2 AndAlso bytes(0) = &H42 AndAlso bytes(1) = &H4D Then
+                Return True
+            End If
+
+            ' GIF: 47 49 46 38
+            If bytes.Length >= 4 AndAlso bytes(0) = &H47 AndAlso bytes(1) = &H49 AndAlso bytes(2) = &H46 AndAlso bytes(3) = &H38 Then
+                Return True
+            End If
+
+            LogErros.RegistrarInfo($"❌ Header desconhecido: {bytes(0):X2} {bytes(1):X2} {bytes(2):X2} {bytes(3):X2}", "ValidarHeaderImagem")
+            Return False
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "ValidarHeaderImagem")
+            Return False
+        End Try
+    End Function
 
     ' Configuração de colunas otimizada
     Private Sub ConfigurarColunasEstoqueOtimizado()
