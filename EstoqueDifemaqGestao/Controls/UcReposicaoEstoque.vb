@@ -24,7 +24,7 @@ Public Class UcReposicaoEstoque
     Private cacheVendas As New Dictionary(Of String, System.Data.DataTable)
     Private cacheValido As DateTime = DateTime.MinValue
     Private Const CACHE_TIMEOUT_MINUTES As Integer = 5
-    Private Shared tabelasEstaticas As New Dictionary(Of String, DataTable)
+    Private Shared tabelasEstaticas As New Dictionary(Of String, System.Data.DataTable)
     Private Shared ultimaAtualizacaoEstatica As DateTime = DateTime.MinValue
     Private colunasConfiguradas As Boolean = False
 
@@ -122,38 +122,49 @@ Public Class UcReposicaoEstoque
     ' Lazy loading - só carrega dados quando necessário
     Private Sub InicializarDados()
         Try
-            If dadosCarregados Then Return
+            If dadosCarregados Then
+                RestaurarBotaoAtualizar()
+                Return
+            End If
 
             ' Obter workbook de forma otimizada
             Dim workbookObj = ObterWorkbookOtimizado()
             If workbookObj Is Nothing Then
                 MessageBox.Show("Não foi possível acessar o workbook do Excel.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                RestaurarBotaoAtualizar()
                 Return
             End If
 
             powerQueryManager = New PowerQueryManager(workbookObj)
             Me.Cursor = Cursors.WaitCursor
+            AtualizarStatus("Inicializando dados pela primeira vez...")
 
             ' Carregar produtos em background
             Task.Run(Sub()
                          Try
-                             Me.Invoke(Sub() CarregarProdutos())
-                             dadosCarregados = True
+                             Me.Invoke(Sub()
+                                           CarregarProdutos()
+                                           dadosCarregados = True
+                                           AtualizarStatus("Dados inicializados com sucesso!")
+                                       End Sub)
                          Catch ex As Exception
                              LogErros.RegistrarErro(ex, "UcReposicaoEstoque.InicializarDados.Background")
                              Me.Invoke(Sub()
+                                           AtualizarStatus("Erro ao inicializar dados")
                                            MessageBox.Show($"Erro ao carregar dados: {ex.Message}", "Erro",
                                                          MessageBoxButtons.OK, MessageBoxIcon.Error)
                                        End Sub)
                          Finally
-                             Me.Invoke(Sub() Me.Cursor = Cursors.Default)
+                             Me.Invoke(Sub()
+                                           RestaurarBotaoAtualizar()
+                                       End Sub)
                          End Try
                      End Sub)
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.InicializarDados")
             MessageBox.Show($"Erro ao inicializar dados: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            Me.Cursor = Cursors.Default
+            RestaurarBotaoAtualizar()
         End Try
     End Sub
 
@@ -173,47 +184,134 @@ Public Class UcReposicaoEstoque
         End Try
     End Function
 
-    ' 5. MODIFICAR o btnAtualizar_Click para invalidar cache:
     Private Sub BtnAtualizar_Click(sender As Object, e As EventArgs)
         Try
+            ' Verificar se já está atualizando
+            If Not btnAtualizar.Enabled Then
+                Return
+            End If
+
             btnAtualizar.Enabled = False
             btnAtualizar.Text = "🔄 Atualizando..."
             Me.Cursor = Cursors.WaitCursor
+            AtualizarStatus("Atualizando dados...")
 
-            ' ✅ INVALIDAR cache completo
+            ' Invalidar cache completo
             InvalidarCacheCompleto()
 
-            ' Resto do código permanece igual...
+            ' Verificar se dados estão inicializados
+            If Not dadosCarregados Then
+                RestaurarBotaoAtualizar()
+                InicializarDados()
+                Return
+            End If
+
             Task.Run(Sub()
                          Try
+                             LogErros.RegistrarInfo("Iniciando atualização Power Query", "BtnAtualizar_Click")
                              AtualizarDadosPowerQuery()
+
                              Me.Invoke(Sub()
-                                           CarregarProdutos()
-                                           MessageBox.Show("Dados atualizados com sucesso!", "Sucesso",
-                                                     MessageBoxButtons.OK, MessageBoxIcon.Information)
+                                           Try
+                                               LogErros.RegistrarInfo("Recarregando produtos após Power Query", "BtnAtualizar_Click")
+                                               CarregarProdutos()
+                                               AtualizarStatus("Dados atualizados com sucesso!")
+
+                                               ' Mostrar mensagem de sucesso apenas se não houve erro
+                                               MessageBox.Show("Dados atualizados com sucesso!", "Sucesso",
+                                                         MessageBoxButtons.OK, MessageBoxIcon.Information)
+                                           Catch loadEx As Exception
+                                               LogErros.RegistrarErro(loadEx, "BtnAtualizar_Click.CarregarProdutos")
+                                               AtualizarStatus("Erro ao carregar produtos após atualização")
+                                               MessageBox.Show($"Erro ao carregar produtos: {loadEx.Message}", "Erro",
+                                                         MessageBoxButtons.OK, MessageBoxIcon.Error)
+                                           End Try
                                        End Sub)
 
                          Catch ex As Exception
                              LogErros.RegistrarErro(ex, "UcReposicaoEstoque.BtnAtualizar_Click.Background")
                              Me.Invoke(Sub()
+                                           AtualizarStatus("Erro na atualização dos dados")
                                            MessageBox.Show($"Erro ao atualizar dados: {ex.Message}", "Erro",
                                                      MessageBoxButtons.OK, MessageBoxIcon.Error)
                                        End Sub)
                          Finally
+                             ' SEMPRE restaurar o botão, independente de sucesso ou erro
                              Me.Invoke(Sub()
-                                           btnAtualizar.Enabled = True
-                                           btnAtualizar.Text = "🔄 Atualizar"
-                                           Me.Cursor = Cursors.Default
+                                           RestaurarBotaoAtualizar()
                                        End Sub)
                          End Try
                      End Sub)
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.BtnAtualizar_Click")
+            AtualizarStatus("Erro na atualização")
             MessageBox.Show($"Erro ao atualizar dados: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            btnAtualizar.Enabled = True
-            btnAtualizar.Text = "🔄 Atualizar"
+            RestaurarBotaoAtualizar()
+        End Try
+    End Sub
+
+    ' Método separado para garantir que o botão seja sempre restaurado
+    Private Sub RestaurarBotaoAtualizar()
+        Try
+            If btnAtualizar IsNot Nothing AndAlso Not btnAtualizar.IsDisposed Then
+                btnAtualizar.Enabled = True
+                btnAtualizar.Text = "🔄 Atualizar"
+            End If
+
             Me.Cursor = Cursors.Default
+
+            If String.IsNullOrEmpty(filtroAtual) Then
+                AtualizarStatus("Pronto")
+            Else
+                AtualizarStatus($"Pronto - Filtro ativo: '{filtroAtual}'")
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.RestaurarBotaoAtualizar")
+        End Try
+    End Sub
+
+    ' Método público para forçar restauração do botão (fallback)
+    Public Sub ForcarRestauracaoBotao()
+        Try
+            RestaurarBotaoAtualizar()
+            LogErros.RegistrarInfo("Restauração forçada do botão atualizar", "ForcarRestauracaoBotao")
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ForcarRestauracaoBotao")
+        End Try
+    End Sub
+
+    ' Verificação periódica do estado do botão (executada a cada 5 segundos)
+    Private Sub VerificarEstadoBotao()
+        Try
+            ' Se o botão estiver desabilitado por mais de 2 minutos, restaurar
+            Static ultimaVerificacao As DateTime = DateTime.MinValue
+            Static botaoDesabilitadoDesde As DateTime = DateTime.MinValue
+
+            If DateTime.Now.Subtract(ultimaVerificacao).TotalSeconds < 5 Then
+                Return ' Verificar apenas a cada 5 segundos
+            End If
+
+            ultimaVerificacao = DateTime.Now
+
+            If btnAtualizar IsNot Nothing AndAlso Not btnAtualizar.IsDisposed Then
+                If Not btnAtualizar.Enabled Then
+                    If botaoDesabilitadoDesde = DateTime.MinValue Then
+                        botaoDesabilitadoDesde = DateTime.Now
+                    ElseIf DateTime.Now.Subtract(botaoDesabilitadoDesde).TotalMinutes > 2 Then
+                        ' Botão desabilitado por mais de 2 minutos - forçar restauração
+                        LogErros.RegistrarInfo("Botão desabilitado por mais de 2 minutos - forçando restauração", "VerificarEstadoBotao")
+                        RestaurarBotaoAtualizar()
+                        botaoDesabilitadoDesde = DateTime.MinValue
+                    End If
+                Else
+                    botaoDesabilitadoDesde = DateTime.MinValue
+                End If
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.VerificarEstadoBotao")
         End Try
     End Sub
 
@@ -308,63 +406,9 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
-    ' Carregamento otimizado com cache
-    Private Sub CarregarDadosProdutoOtimizado(codigoProduto As String)
-        Try
-            LimparDadosSecundarios()
-
-            ' Usar cursor apenas se necessário
-            Dim usarCursor = Not CacheEstaValido()
-            If usarCursor Then Me.Cursor = Cursors.WaitCursor
-
-            ' Suspender layouts para performance
-            dgvEstoque.SuspendLayout()
-            dgvCompras.SuspendLayout()
-            dgvVendas.SuspendLayout()
-
-            Try
-                ' Carregar dados com cache
-                Dim estoqueData = CarregarDadosComCache("estoque", codigoProduto, ConfiguracaoApp.TABELA_ESTOQUE)
-                dgvEstoque.DataSource = estoqueData
-                ConfigurarColunasEstoqueOtimizado()
-                grpEstoque.Text = $"📊 Estoque Atual ({estoqueData.Rows.Count} registros)"
-
-                Dim comprasData = CarregarDadosComCache("compras", codigoProduto, ConfiguracaoApp.TABELA_COMPRAS)
-                dgvCompras.DataSource = comprasData
-                ConfigurarColunasComprasOtimizado()
-                grpCompras.Text = $"📈 Compras ({comprasData.Rows.Count} registros)"
-
-                Dim vendasData = CarregarDadosComCache("vendas", codigoProduto, ConfiguracaoApp.TABELA_VENDAS)
-                dgvVendas.DataSource = vendasData
-                ConfigurarColunasVendasOtimizado()
-                grpVendas.Text = $"📉 Vendas ({vendasData.Rows.Count} registros)"
-
-                ' Aplicar estilização apenas se necessário
-                If usarCursor Then
-                    dgvEstoque.EstilizarDataGridView()
-                    dgvCompras.EstilizarDataGridView()
-                    dgvVendas.EstilizarDataGridView()
-                End If
-
-                ' Carregar imagem de forma assíncrona
-                CarregarImagemProdutoAsync(codigoProduto)
-
-            Finally
-                dgvEstoque.ResumeLayout(True)
-                dgvCompras.ResumeLayout(True)
-                dgvVendas.ResumeLayout(True)
-                If usarCursor Then Me.Cursor = Cursors.Default
-            End Try
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.CarregarDadosProdutoOtimizado")
-            Me.Cursor = Cursors.Default
-        End Try
-    End Sub
-
     ' CARREGAMENTO OTIMIZADO: Uma consulta, filtro rápido
-    Private Function CarregarDadosOtimizado(codigoProduto As String) As Dictionary(Of String, DataTable)
-        Dim resultado As New Dictionary(Of String, DataTable)
+    Private Function CarregarDadosOtimizado(codigoProduto As String) As Dictionary(Of String, System.Data.DataTable)
+        Dim resultado As New Dictionary(Of String, System.Data.DataTable)
 
         Try
             ' USAR cache estático das tabelas completas (recarrega apenas a cada 5 min)
@@ -383,9 +427,9 @@ Public Class UcReposicaoEstoque
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "CarregarDadosOtimizado")
             ' Retornar DataTables vazios em caso de erro
-            resultado("estoque") = New DataTable()
-            resultado("compras") = New DataTable()
-            resultado("vendas") = New DataTable()
+            resultado("estoque") = CriarDataTableVazio()
+            resultado("compras") = CriarDataTableVazio()
+            resultado("vendas") = CriarDataTableVazio()
         End Try
 
         Return resultado
@@ -403,9 +447,20 @@ Public Class UcReposicaoEstoque
         Try
             LogErros.RegistrarInfo("Carregando tabelas estáticas...", "CarregarTabelasEstaticas")
 
+            ' Obter referência ao Excel de forma correta
+            Dim excelApp As Microsoft.Office.Interop.Excel.Application = Nothing
+            Dim workbookInterface = ObterWorkbookOtimizado()
+
+            If workbookInterface IsNot Nothing Then
+                excelApp = workbookInterface.Application
+            End If
+
             ' Desabilitar cálculo automático do Excel
-            Dim calculationState = Workbook.Application.Calculation
-            Workbook.Application.Calculation = Microsoft.Office.Interop.Excel.XlCalculation.xlCalculationManual
+            Dim calculationState As Microsoft.Office.Interop.Excel.XlCalculation = Microsoft.Office.Interop.Excel.XlCalculation.xlCalculationAutomatic
+            If excelApp IsNot Nothing Then
+                calculationState = excelApp.Calculation
+                excelApp.Calculation = Microsoft.Office.Interop.Excel.XlCalculation.xlCalculationManual
+            End If
 
             Try
                 ' Carregar tabelas completas UMA VEZ
@@ -414,9 +469,12 @@ Public Class UcReposicaoEstoque
                 Dim tabelaVendas = powerQueryManager.ObterTabela(ConfiguracaoApp.TABELA_VENDAS)
 
                 ' Converter para DataTable e armazenar
-                tabelasEstaticas("estoque") = DataHelper.ConvertListObjectToDataTable(tabelaEstoque)
-                tabelasEstaticas("compras") = DataHelper.ConvertListObjectToDataTable(tabelaCompras)
-                tabelasEstaticas("vendas") = DataHelper.ConvertListObjectToDataTable(tabelaVendas)
+                tabelasEstaticas("estoque") = If(tabelaEstoque IsNot Nothing,
+                    DataHelper.ConvertListObjectToDataTable(tabelaEstoque), CriarDataTableVazio())
+                tabelasEstaticas("compras") = If(tabelaCompras IsNot Nothing,
+                    DataHelper.ConvertListObjectToDataTable(tabelaCompras), CriarDataTableVazio())
+                tabelasEstaticas("vendas") = If(tabelaVendas IsNot Nothing,
+                    DataHelper.ConvertListObjectToDataTable(tabelaVendas), CriarDataTableVazio())
 
                 ultimaAtualizacaoEstatica = DateTime.Now
 
@@ -424,7 +482,9 @@ Public Class UcReposicaoEstoque
                                  $"Compras: {tabelasEstaticas("compras").Rows.Count}, " &
                                  $"Vendas: {tabelasEstaticas("vendas").Rows.Count}", "CarregarTabelasEstaticas")
             Finally
-                Workbook.Application.Calculation = calculationState
+                If excelApp IsNot Nothing Then
+                    excelApp.Calculation = calculationState
+                End If
             End Try
 
         Catch ex As Exception
@@ -433,11 +493,16 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
+    ' Helper para criar DataTable vazio
+    Private Function CriarDataTableVazio() As System.Data.DataTable
+        Return New System.Data.DataTable()
+    End Function
+
     ' FILTRO ULTRA-RÁPIDO: DataView em vez de loop manual
-    Private Function FiltrarRapidoComDataView(tabelaCompleta As DataTable, codigoProduto As String) As DataTable
+    Private Function FiltrarRapidoComDataView(tabelaCompleta As System.Data.DataTable, codigoProduto As String) As System.Data.DataTable
         Try
             If tabelaCompleta Is Nothing OrElse tabelaCompleta.Rows.Count = 0 Then
-                Return New DataTable()
+                Return CriarDataTableVazio()
             End If
 
             ' Criar DataView com filtro (muito mais rápido que loop)
@@ -453,12 +518,12 @@ Public Class UcReposicaoEstoque
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, $"FiltrarRapidoComDataView - Produto: {codigoProduto}")
-            Return New DataTable()
+            Return CriarDataTableVazio()
         End Try
     End Function
 
     ' APLICAÇÃO ULTRA-RÁPIDA: Sem estilização repetitiva
-    Private Sub AplicarDadosUltraRapido(dados As Dictionary(Of String, DataTable), codigoProduto As String)
+    Private Sub AplicarDadosUltraRapido(dados As Dictionary(Of String, System.Data.DataTable), codigoProduto As String)
         Try
             ' Aplicar DataSource diretamente
             dgvEstoque.DataSource = dados("estoque")
@@ -522,7 +587,7 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
-    Private Sub ArmazenarNoCacheIndividual(codigoProduto As String, dados As Dictionary(Of String, DataTable))
+    Private Sub ArmazenarNoCacheIndividual(codigoProduto As String, dados As Dictionary(Of String, System.Data.DataTable))
         Try
             cacheEstoque($"estoque_{codigoProduto}") = dados("estoque")
             cacheCompras($"compras_{codigoProduto}") = dados("compras")
@@ -537,8 +602,7 @@ Public Class UcReposicaoEstoque
     Private Sub CarregarImagemAsync(codigoProduto As String)
         Task.Run(Sub()
                      Try
-                         ' Código da imagem permanece igual, mas em background
-                         ' ... (código atual da CarregarImagemProdutoAsync)
+                         CarregarImagemProdutoAsync(codigoProduto)
                      Catch ex As Exception
                          LogErros.RegistrarErro(ex, "CarregarImagemAsync")
                      End Try
@@ -549,6 +613,7 @@ Public Class UcReposicaoEstoque
     Private Sub DataGrid_DataBindingComplete(sender As Object, e As DataGridViewBindingCompleteEventArgs)
         ' Configurações pós-binding se necessário
     End Sub
+
     Private Sub CarregarDadosProdutoUltraRapido(codigoProduto As String)
         Try
             Dim sw As New Stopwatch()
@@ -658,193 +723,6 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
-    Private Sub DesabilitarRedesenho()
-        ' API Windows para parar completamente o redesenho
-        SendMessage(dgvEstoque.Handle, WM_SETREDRAW, False, 0)
-        SendMessage(dgvCompras.Handle, WM_SETREDRAW, False, 0)
-        SendMessage(dgvVendas.Handle, WM_SETREDRAW, False, 0)
-
-        ' Suspender layouts
-        dgvEstoque.SuspendLayout()
-        dgvCompras.SuspendLayout()
-        dgvVendas.SuspendLayout()
-
-        ' Desabilitar auto-size que é muito lento
-        dgvEstoque.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None
-        dgvCompras.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None
-        dgvVendas.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None
-    End Sub
-
-    Private Sub ReabilitarRedesenho()
-        ' Reabilitar auto-size
-        dgvEstoque.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells
-        dgvCompras.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells
-        dgvVendas.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells
-
-        ' Resumir layouts
-        dgvEstoque.ResumeLayout(True)
-        dgvCompras.ResumeLayout(True)
-        dgvVendas.ResumeLayout(True)
-
-        ' Reabilitar redesenho e forçar atualização
-        SendMessage(dgvEstoque.Handle, WM_SETREDRAW, True, 0)
-        SendMessage(dgvCompras.Handle, WM_SETREDRAW, True, 0)
-        SendMessage(dgvVendas.Handle, WM_SETREDRAW, True, 0)
-
-        dgvEstoque.Refresh()
-        dgvCompras.Refresh()
-        dgvVendas.Refresh()
-    End Sub
-
-    Private Function CarregarTodosDadosDeUmaVez(codigoProduto As String) As Dictionary(Of String, DataTable)
-        Dim resultado As New Dictionary(Of String, DataTable)
-
-        Try
-            ' Desabilitar cálculo automático do Excel temporariamente
-            Dim calculationState = Me.Application.Calculation
-            Me.Application.Calculation = XlCalculation.xlCalculationManual
-
-            Try
-                ' Carregar uma vez cada tabela completa
-                Dim tabelaEstoque = powerQueryManager.ObterTabela(ConfiguracaoApp.TABELA_ESTOQUE)
-                Dim tabelaCompras = powerQueryManager.ObterTabela(ConfiguracaoApp.TABELA_COMPRAS)
-                Dim tabelaVendas = powerQueryManager.ObterTabela(ConfiguracaoApp.TABELA_VENDAS)
-
-                ' Converter para DataTable e filtrar COM DATAVIEW (muito mais rápido)
-                resultado("estoque") = FiltrarComDataView(
-                DataHelper.ConvertListObjectToDataTable(tabelaEstoque), codigoProduto)
-                resultado("compras") = FiltrarComDataView(
-                DataHelper.ConvertListObjectToDataTable(tabelaCompras), codigoProduto)
-                resultado("vendas") = FiltrarComDataView(
-                DataHelper.ConvertListObjectToDataTable(tabelaVendas), codigoProduto)
-
-            Finally
-                ' Restaurar cálculo automático
-                Me.Application.Calculation = calculationState
-            End Try
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "CarregarTodosDadosDeUmaVez")
-        End Try
-
-        Return resultado
-    End Function
-
-    Private Function FiltrarComDataView(dataTable As DataTable, codigoProduto As String) As DataTable
-        Try
-            If dataTable Is Nothing OrElse dataTable.Rows.Count = 0 Then
-                Return New DataTable()
-            End If
-
-            ' Usar DataView com RowFilter (muito mais rápido que loop manual)
-            Dim dataView As New DataView(dataTable)
-            Dim nomeColuna = dataTable.Columns(0).ColumnName
-            dataView.RowFilter = $"[{nomeColuna}] = '{codigoProduto.Replace("'", "''").Replace("]", "]]")}'"
-
-            ' Converter DataView filtrado para DataTable
-            Return dataView.ToTable()
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "FiltrarComDataView")
-            Return New DataTable()
-        End Try
-    End Function
-
-    Private Sub AplicarDadosRapido(dados As Dictionary(Of String, DataTable))
-        Try
-            ' Aplicar DataSource diretamente (sem estilização)
-            dgvEstoque.DataSource = dados("estoque")
-            dgvCompras.DataSource = dados("compras")
-            dgvVendas.DataSource = dados("vendas")
-
-            ' Configurar colunas apenas se necessário (primeira vez)
-            If Not colunasConfiguradas Then
-                ConfigurarTodasAsColunas()
-                colunasConfiguradas = True
-            End If
-
-            ' Atualizar contadores
-            grpEstoque.Text = $"📊 Estoque Atual ({dados("estoque").Rows.Count})"
-            grpCompras.Text = $"📈 Compras ({dados("compras").Rows.Count})"
-            grpVendas.Text = $"📉 Vendas ({dados("vendas").Rows.Count})"
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, "AplicarDadosRapido")
-        End Try
-    End Sub
-
-    Private Function CarregarDadosComCache(tipo As String, codigoProduto As String, nomeTabela As String) As System.Data.DataTable
-        Try
-            Dim chaveCache = $"{tipo}_{codigoProduto}"
-
-            ' Verificar cache
-            If CacheEstaValido() Then
-                Select Case tipo
-                    Case "estoque"
-                        If cacheEstoque.ContainsKey(chaveCache) Then
-                            Return cacheEstoque(chaveCache)
-                        End If
-                    Case "compras"
-                        If cacheCompras.ContainsKey(chaveCache) Then
-                            Return cacheCompras(chaveCache)
-                        End If
-                    Case "vendas"
-                        If cacheVendas.ContainsKey(chaveCache) Then
-                            Return cacheVendas(chaveCache)
-                        End If
-                End Select
-            End If
-
-            ' Carregar dados
-            Dim dados = CarregarDadosFiltrados(nomeTabela, codigoProduto)
-
-            ' Armazenar no cache
-            Select Case tipo
-                Case "estoque"
-                    cacheEstoque(chaveCache) = dados
-                Case "compras"
-                    cacheCompras(chaveCache) = dados
-                Case "vendas"
-                    cacheVendas(chaveCache) = dados
-            End Select
-
-            ' Atualizar timestamp do cache
-            cacheValido = DateTime.Now
-
-            Return dados
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, $"UcReposicaoEstoque.CarregarDadosComCache({tipo}, {codigoProduto})")
-            Return New System.Data.DataTable()
-        End Try
-    End Function
-
-    Private Function CarregarDadosFiltrados(nomeTabela As String, codigoProduto As String) As System.Data.DataTable
-        Try
-            If powerQueryManager Is Nothing Then
-                Return New System.Data.DataTable()
-            End If
-
-            Dim tabela As ListObject = powerQueryManager.ObterTabela(nomeTabela)
-            If tabela Is Nothing Then
-                Return New System.Data.DataTable()
-            End If
-
-            Dim dataTable As System.Data.DataTable = DataHelper.ConvertListObjectToDataTable(tabela)
-
-            ' Filtrar por código do produto de forma otimizada
-            If dataTable.Columns.Count > 0 Then
-                Return DataHelper.FiltrarDataTable(dataTable, dataTable.Columns(0).ColumnName, codigoProduto)
-            End If
-
-            Return dataTable
-
-        Catch ex As Exception
-            LogErros.RegistrarErro(ex, $"UcReposicaoEstoque.CarregarDadosFiltrados({nomeTabela}, {codigoProduto})")
-            Return New System.Data.DataTable()
-        End Try
-    End Function
-
     ' Carregamento assíncrono de imagem otimizado
     Private Sub CarregarImagemProdutoAsync(codigoProduto As String)
         If isCarregandoImagem Then Return
@@ -911,7 +789,7 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
-    ' Resto dos métodos de configuração otimizados...
+    ' Configuração de colunas otimizada
     Private Sub ConfigurarColunasEstoqueOtimizado()
         Try
             If dgvEstoque.DataSource IsNot Nothing AndAlso dgvEstoque.Columns.Count >= 9 Then
@@ -1005,6 +883,9 @@ Public Class UcReposicaoEstoque
                 debounceTimer.Stop()
             End If
 
+            ' Verificar estado do botão periodicamente
+            VerificarEstadoBotao()
+
             If dgvProdutos.SelectedRows.Count > 0 Then
                 Dim produtoSelecionadoRow As DataGridViewRow = dgvProdutos.SelectedRows(0)
 
@@ -1014,8 +895,6 @@ Public Class UcReposicaoEstoque
 
                     If Not String.IsNullOrEmpty(codigoProduto) AndAlso codigoProduto <> produtoSelecionado Then
                         produtoSelecionado = codigoProduto
-
-                        ' ✅ NOVA CHAMADA OTIMIZADA:
                         CarregarDadosProdutoUltraRapido(codigoProduto)
                     End If
                 End If
@@ -1205,6 +1084,68 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
+    ' Métodos para invalidar cache quando atualizar dados
+    Private Sub InvalidarCacheCompleto()
+        ' Invalidar cache estático
+        tabelasEstaticas.Clear()
+        ultimaAtualizacaoEstatica = DateTime.MinValue
+
+        ' Invalidar cache individual
+        cacheEstoque.Clear()
+        cacheCompras.Clear()
+        cacheVendas.Clear()
+        cacheValido = DateTime.MinValue
+
+        ' Resetar flag de colunas
+        colunasConfiguradas = False
+    End Sub
+
+    ' Método de diagnóstico para medir performance
+    Private Sub DiagnosticarPerformance()
+        Dim sw As New Stopwatch()
+
+        ' Teste 1: Cache estático
+        sw.Start()
+        If Not TabelasEstaticasValidas() Then
+            CarregarTabelasEstaticas()
+        End If
+        sw.Stop()
+        LogErros.RegistrarInfo($"🔧 Carregamento tabelas estáticas: {sw.ElapsedMilliseconds}ms", "Diagnóstico")
+
+        ' Teste 2: Filtro rápido
+        If tabelasEstaticas.ContainsKey("estoque") Then
+            sw.Restart()
+            Dim resultado = FiltrarRapidoComDataView(tabelasEstaticas("estoque"), produtoSelecionado)
+            sw.Stop()
+            LogErros.RegistrarInfo($"⚡ Filtro DataView: {sw.ElapsedMilliseconds}ms para {resultado.Rows.Count} registros", "Diagnóstico")
+        End If
+
+        ' Teste 3: Aplicação aos grids
+        sw.Restart()
+        Dim dadosTest As New Dictionary(Of String, System.Data.DataTable)
+        dadosTest("estoque") = CriarDataTableVazio()
+        dadosTest("compras") = CriarDataTableVazio()
+        dadosTest("vendas") = CriarDataTableVazio()
+
+        PararRedesenhoCompleto()
+        AplicarDadosUltraRapido(dadosTest, "TEST")
+        ReabilitarRedesenhoCompleto()
+        sw.Stop()
+        LogErros.RegistrarInfo($"📊 Aplicação aos grids: {sw.ElapsedMilliseconds}ms", "Diagnóstico")
+    End Sub
+
+    Private Sub LimpezaAutomaticaCache()
+        ' A cada 30 minutos, limpar cache para liberar memória
+        If DateTime.Now.Minute = 0 OrElse DateTime.Now.Minute = 30 Then
+            If DateTime.Now.Subtract(ultimaLimpezaCache).TotalMinutes > 25 Then
+                InvalidarCacheCompleto()
+                GC.Collect()
+                ultimaLimpezaCache = DateTime.Now
+                LogErros.RegistrarInfo("🧹 Cache limpo automaticamente", "LimpezaCache")
+            End If
+        End If
+    End Sub
+
     Protected Overrides Sub Dispose(disposing As Boolean)
         Try
             If disposing Then
@@ -1240,68 +1181,6 @@ Public Class UcReposicaoEstoque
         Finally
             MyBase.Dispose(disposing)
         End Try
-    End Sub
-
-    ' 4. ADICIONAR método para invalidar cache quando atualizar dados:
-    Private Sub InvalidarCacheCompleto()
-        ' Invalidar cache estático
-        tabelasEstaticas.Clear()
-        ultimaAtualizacaoEstatica = DateTime.MinValue
-
-        ' Invalidar cache individual
-        cacheEstoque.Clear()
-        cacheCompras.Clear()
-        cacheVendas.Clear()
-        cacheValido = DateTime.MinValue
-
-        ' Resetar flag de colunas
-        colunasConfiguradas = False
-    End Sub
-
-    ' 6. OPCIONAL: Adicionar método de diagnóstico para medir performance:
-    Private Sub DiagnosticarPerformance()
-        Dim sw As New Stopwatch()
-
-        ' Teste 1: Cache estático
-        sw.Start()
-        If Not TabelasEstaticasValidas() Then
-            CarregarTabelasEstaticas()
-        End If
-        sw.Stop()
-        LogErros.RegistrarInfo($"🔧 Carregamento tabelas estáticas: {sw.ElapsedMilliseconds}ms", "Diagnóstico")
-
-        ' Teste 2: Filtro rápido
-        If tabelasEstaticas.ContainsKey("estoque") Then
-            sw.Restart()
-            Dim resultado = FiltrarRapidoComDataView(tabelasEstaticas("estoque"), produtoSelecionado)
-            sw.Stop()
-            LogErros.RegistrarInfo($"⚡ Filtro DataView: {sw.ElapsedMilliseconds}ms para {resultado.Rows.Count} registros", "Diagnóstico")
-        End If
-
-        ' Teste 3: Aplicação aos grids
-        sw.Restart()
-        Dim dadosTest = New Dictionary(Of String, DataTable)
-        dadosTest("estoque") = New DataTable()
-        dadosTest("compras") = New DataTable()
-        dadosTest("vendas") = New DataTable()
-
-        PararRedesenhoCompleto()
-        AplicarDadosUltraRapido(dadosTest, "TEST")
-        ReabilitarRedesenhoCompleto()
-        sw.Stop()
-        LogErros.RegistrarInfo($"📊 Aplicação aos grids: {sw.ElapsedMilliseconds}ms", "Diagnóstico")
-    End Sub
-
-    Private Sub LimpezaAutomaticaCache()
-        ' A cada 30 minutos, limpar cache para liberar memória
-        If DateTime.Now.Minute = 0 OrElse DateTime.Now.Minute = 30 Then
-            If DateTime.Now.Subtract(ultimaLimpezaCache).TotalMinutes > 25 Then
-                InvalidarCacheCompleto()
-                GC.Collect()
-                ultimaLimpezaCache = DateTime.Now
-                LogErros.RegistrarInfo("🧹 Cache limpo automaticamente", "LimpezaCache")
-            End If
-        End If
     End Sub
 
 End Class

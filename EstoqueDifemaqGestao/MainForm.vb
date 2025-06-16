@@ -475,6 +475,17 @@ Public Class MainForm
                                 AtualizarStatus("Modo de desenvolvimento ativado")
                             End If
                         End If
+
+                ' ✅ ADICIONAR ESTAS LINHAS:
+                    Case Keys.I
+                        VerificarConfiguracaoImagens()
+                        e.Handled = True
+                    Case Keys.P
+                        Dim produto = InputBox("Digite o código do produto para testar:", "Teste de Imagem", "101")
+                        If Not String.IsNullOrEmpty(produto) Then
+                            TestarImagemProduto(produto)
+                        End If
+                        e.Handled = True
                 End Select
             End If
 
@@ -567,5 +578,161 @@ Public Class MainForm
             Return New Dictionary(Of String, String)
         End Try
     End Function
+
+    Public Sub VerificarConfiguracaoImagens()
+        Try
+            Dim relatorio As New System.Text.StringBuilder()
+            relatorio.AppendLine("=== RELATÓRIO DE IMAGENS ===")
+            relatorio.AppendLine($"Data: {DateTime.Now:yyyy-MM-dd HH:mm:ss}")
+            relatorio.AppendLine()
+
+            ' 1. Verificar diretório
+            relatorio.AppendLine($"📁 Diretório configurado: {ConfiguracaoApp.CAMINHO_IMAGENS}")
+
+            If Not System.IO.Directory.Exists(ConfiguracaoApp.CAMINHO_IMAGENS) Then
+                relatorio.AppendLine("❌ ERRO: Diretório não existe!")
+                relatorio.AppendLine("💡 SOLUÇÃO: Criar o diretório ou alterar o caminho")
+            Else
+                relatorio.AppendLine("✅ Diretório existe")
+
+                ' Verificar permissões
+                Try
+                    Dim testFile = System.IO.Path.Combine(ConfiguracaoApp.CAMINHO_IMAGENS, "test.tmp")
+                    System.IO.File.WriteAllText(testFile, "teste")
+                    System.IO.File.Delete(testFile)
+                    relatorio.AppendLine("✅ Permissões de escrita OK")
+                Catch
+                    relatorio.AppendLine("⚠️ AVISO: Sem permissão de escrita")
+                End Try
+            End If
+
+            relatorio.AppendLine()
+
+            ' 2. Verificar extensões suportadas
+            relatorio.AppendLine("📸 Extensões suportadas:")
+            For Each ext In ConfiguracaoApp.EXTENSOES_IMAGEM
+                relatorio.AppendLine($"   • {ext}")
+            Next
+
+            ' 3. Verificar tamanho máximo
+            Dim tamanhoMB = ConfiguracaoApp.TAMANHO_MAXIMO_IMAGEM / 1024 / 1024
+            relatorio.AppendLine($"📏 Tamanho máximo: {tamanhoMB}MB")
+            relatorio.AppendLine()
+
+            ' 4. Analisar imagens existentes
+            If System.IO.Directory.Exists(ConfiguracaoApp.CAMINHO_IMAGENS) Then
+                relatorio.AppendLine("🔍 ANÁLISE DAS IMAGENS:")
+
+                Dim arquivos = System.IO.Directory.GetFiles(ConfiguracaoApp.CAMINHO_IMAGENS)
+                relatorio.AppendLine($"📊 Total de arquivos encontrados: {arquivos.Length}")
+
+                Dim imagensValidas As Integer = 0
+                Dim imagensInvalidas As Integer = 0
+                Dim exemplos As New List(Of String)
+
+                For Each arquivo In arquivos
+                    Dim nomeArquivo = System.IO.Path.GetFileName(arquivo)
+                    Dim extensao = System.IO.Path.GetExtension(arquivo).ToLower()
+                    Dim tamanho = New System.IO.FileInfo(arquivo).Length
+
+                    Dim valida = ConfiguracaoApp.EXTENSOES_IMAGEM.Contains(extensao) AndAlso
+                               tamanho <= ConfiguracaoApp.TAMANHO_MAXIMO_IMAGEM
+
+                    If valida Then
+                        imagensValidas += 1
+                        If exemplos.Count < 5 Then
+                            exemplos.Add($"✅ {nomeArquivo} ({(tamanho / 1024):F0}KB)")
+                        End If
+                    Else
+                        imagensInvalidas += 1
+                        If exemplos.Count < 5 Then
+                            Dim motivo = If(Not ConfiguracaoApp.EXTENSOES_IMAGEM.Contains(extensao),
+                                          "extensão não suportada", "arquivo muito grande")
+                            exemplos.Add($"❌ {nomeArquivo} ({motivo})")
+                        End If
+                    End If
+                Next
+
+                relatorio.AppendLine($"✅ Imagens válidas: {imagensValidas}")
+                relatorio.AppendLine($"❌ Imagens inválidas: {imagensInvalidas}")
+                relatorio.AppendLine()
+
+                If exemplos.Count > 0 Then
+                    relatorio.AppendLine("📋 Exemplos:")
+                    For Each exemplo In exemplos
+                        relatorio.AppendLine($"   {exemplo}")
+                    Next
+                    If arquivos.Length > 5 Then
+                        relatorio.AppendLine($"   ... e mais {arquivos.Length - 5} arquivos")
+                    End If
+                End If
+            End If
+
+            ' 5. Exemplo de nomenclatura
+            relatorio.AppendLine()
+            relatorio.AppendLine("💡 EXEMPLO DE NOMENCLATURA CORRETA:")
+            relatorio.AppendLine("   Código do produto: ABC123")
+            relatorio.AppendLine("   Nome do arquivo: ABC123.jpg")
+            relatorio.AppendLine("   Caminho completo: C:\ImagesEstoque\ABC123.jpg")
+            relatorio.AppendLine()
+            relatorio.AppendLine("⚠️ IMPORTANTE:")
+            relatorio.AppendLine("   • Nome do arquivo = Código EXATO do produto")
+            relatorio.AppendLine("   • Diferenciar maiúsculas/minúsculas")
+            relatorio.AppendLine("   • Não usar espaços ou caracteres especiais")
+
+            ' Exibir relatório
+            MessageBox.Show(relatorio.ToString(), "Verificação de Imagens",
+                           MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+            ' Salvar relatório
+            Try
+                Dim caminhoRelatorio = System.IO.Path.Combine(ConfiguracaoApp.CAMINHO_LOG,
+                                                             $"RelatorioImagens_{DateTime.Now:yyyyMMdd_HHmmss}.txt")
+                System.IO.File.WriteAllText(caminhoRelatorio, relatorio.ToString())
+                MessageBox.Show($"Relatório salvo em: {caminhoRelatorio}", "Relatório Salvo")
+            Catch
+                ' Ignorar se não conseguir salvar
+            End Try
+
+        Catch ex As Exception
+            MessageBox.Show($"Erro na verificação: {ex.Message}", "Erro",
+                           MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    ' TESTADOR RÁPIDO - Testar com um produto específico
+    Public Sub TestarImagemProduto(codigoProduto As String)
+        Try
+            Dim imagemEncontrada As Boolean = False
+            Dim caminhoEncontrado As String = ""
+
+            For Each extensao In ConfiguracaoApp.EXTENSOES_IMAGEM
+                Dim caminho = System.IO.Path.Combine(ConfiguracaoApp.CAMINHO_IMAGENS, $"{codigoProduto}{extensao}")
+                If System.IO.File.Exists(caminho) Then
+                    imagemEncontrada = True
+                    caminhoEncontrado = caminho
+                    Exit For
+                End If
+            Next
+
+            If imagemEncontrada Then
+                Dim tamanho = New System.IO.FileInfo(caminhoEncontrado).Length
+                Dim tamanhoKB = tamanho / 1024
+                MessageBox.Show($"✅ IMAGEM ENCONTRADA!" & vbCrLf & vbCrLf &
+                              $"Produto: {codigoProduto}" & vbCrLf &
+                              $"Arquivo: {System.IO.Path.GetFileName(caminhoEncontrado)}" & vbCrLf &
+                              $"Tamanho: {tamanhoKB:F1}KB" & vbCrLf &
+                              $"Caminho: {caminhoEncontrado}", "Teste de Imagem")
+            Else
+                MessageBox.Show($"❌ IMAGEM NÃO ENCONTRADA!" & vbCrLf & vbCrLf &
+                              $"Produto: {codigoProduto}" & vbCrLf &
+                              $"Procurado em: {ConfiguracaoApp.CAMINHO_IMAGENS}" & vbCrLf &
+                              $"Extensões testadas: {String.Join(", ", ConfiguracaoApp.EXTENSOES_IMAGEM)}", "Teste de Imagem")
+            End If
+
+        Catch ex As Exception
+            MessageBox.Show($"Erro no teste: {ex.Message}", "Erro")
+        End Try
+    End Sub
 
 End Class
