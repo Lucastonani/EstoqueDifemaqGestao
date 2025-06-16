@@ -444,6 +444,7 @@ Public Class MainForm
         End Try
     End Sub
 
+    ' ✅ LOCALIZAR ESTE MÉTODO NO MainForm.vb:
     Private Sub MainForm_KeyDown(sender As Object, e As KeyEventArgs)
         Try
             If isDisposing OrElse Me.IsDisposed Then Return
@@ -475,8 +476,6 @@ Public Class MainForm
                                 AtualizarStatus("Modo de desenvolvimento ativado")
                             End If
                         End If
-
-                ' ✅ ADICIONAR ESTAS LINHAS:
                     Case Keys.I
                         VerificarConfiguracaoImagens()
                         e.Handled = True
@@ -485,6 +484,34 @@ Public Class MainForm
                         If Not String.IsNullOrEmpty(produto) Then
                             TestarImagemProduto(produto)
                         End If
+                        e.Handled = True
+
+                ' ✅ ADICIONAR ESTAS LINHAS NOVAS:
+                    Case Keys.D
+                        ' Debug do cache de imagens
+                        If ucReposicaoEstoque IsNot Nothing Then
+                            ucReposicaoEstoque.AcessarDebugImagens()
+                            AtualizarStatus("Debug do cache de imagens executado")
+                        Else
+                            MessageBox.Show("UserControl não está carregado", "Debug", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                        End If
+                        e.Handled = True
+
+                    Case Keys.R
+                        ' Forçar recarregamento da imagem do produto atual
+                        If ucReposicaoEstoque IsNot Nothing AndAlso Not String.IsNullOrEmpty(ucReposicaoEstoque.ProdutoAtual) Then
+                            ucReposicaoEstoque.ForcarRecarregamentoImagem(ucReposicaoEstoque.ProdutoAtual)
+                            AtualizarStatus($"Forçado recarregamento da imagem: {ucReposicaoEstoque.ProdutoAtual}")
+                        Else
+                            MessageBox.Show("Nenhum produto selecionado ou UserControl não carregado", "Recarregar Imagem", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                        End If
+                        e.Handled = True
+
+                    Case Keys.C
+                        ' Limpar cache completo de imagens
+                        UcReposicaoEstoque.LimparCacheGlobal()
+                        AtualizarStatus("Cache global de imagens limpo")
+                        MessageBox.Show("Cache global de imagens foi limpo!", "Cache Limpo", MessageBoxButtons.OK, MessageBoxIcon.Information)
                         e.Handled = True
                 End Select
             End If
@@ -498,9 +525,31 @@ Public Class MainForm
         End Try
     End Sub
 
+
+    ' ✅ SUBSTITUIR O MÉTODO MostrarAjuda NO MainForm.vb:
     Private Sub MostrarAjuda()
         Try
-            Dim ajuda = $"Atalhos de Teclado:{Environment.NewLine}{Environment.NewLine}Ctrl+1 - Reposição de Estoque{Environment.NewLine}Ctrl+2 - Relatórios{Environment.NewLine}Ctrl+3 - Configurações{Environment.NewLine}Ctrl+F5 - Atualizar dados{Environment.NewLine}Ctrl+Q - Fechar aplicação{Environment.NewLine}F1 - Esta ajuda{Environment.NewLine}{Environment.NewLine}Navegação:{Environment.NewLine}• Use os botões do menu superior para navegar entre módulos{Environment.NewLine}• Clique duplo em produtos para ver detalhes{Environment.NewLine}• Use o filtro para localizar produtos rapidamente"
+            Dim ajuda = $"Atalhos de Teclado:{Environment.NewLine}{Environment.NewLine}" &
+                   $"=== NAVEGAÇÃO ==={Environment.NewLine}" &
+                   $"Ctrl+1 - Reposição de Estoque{Environment.NewLine}" &
+                   $"Ctrl+2 - Relatórios{Environment.NewLine}" &
+                   $"Ctrl+3 - Configurações{Environment.NewLine}" &
+                   $"Ctrl+F5 - Atualizar dados{Environment.NewLine}" &
+                   $"Ctrl+Q - Fechar aplicação{Environment.NewLine}" &
+                   $"F1 - Esta ajuda{Environment.NewLine}{Environment.NewLine}" &
+                   $"=== TESTE DE IMAGENS ==={Environment.NewLine}" &
+                   $"Ctrl+I - Verificar configuração de imagens{Environment.NewLine}" &
+                   $"Ctrl+P - Testar imagem de produto específico{Environment.NewLine}{Environment.NewLine}" &
+                   $"=== DEBUG DE IMAGENS ==={Environment.NewLine}" &
+                   $"Ctrl+D - Debug do cache de imagens{Environment.NewLine}" &
+                   $"Ctrl+R - Recarregar imagem do produto atual{Environment.NewLine}" &
+                   $"Ctrl+C - Limpar cache global de imagens{Environment.NewLine}{Environment.NewLine}" &
+                   $"=== NAVEGAÇÃO NO GRID ==={Environment.NewLine}" &
+                   $"• Use os botões do menu superior para navegar entre módulos{Environment.NewLine}" &
+                   $"• Clique duplo em produtos para ver detalhes{Environment.NewLine}" &
+                   $"• Use o filtro para localizar produtos rapidamente{Environment.NewLine}" &
+                   $"• F5 no grid para atualizar dados{Environment.NewLine}" &
+                   $"• Ctrl+F ou F3 no grid para focar no filtro"
 
             MessageBox.Show(ajuda, "Ajuda - Gestão de Estoque Difemaq", MessageBoxButtons.OK, MessageBoxIcon.Information)
 

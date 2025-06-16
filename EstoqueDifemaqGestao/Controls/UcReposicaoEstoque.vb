@@ -27,10 +27,15 @@ Public Class UcReposicaoEstoque
     Private Shared tabelasEstaticas As New Dictionary(Of String, System.Data.DataTable)
     Private Shared ultimaAtualizacaoEstatica As DateTime = DateTime.MinValue
     Private colunasConfiguradas As Boolean = False
-
     Private ultimaLimpezaCache As DateTime = DateTime.MinValue
 
-    ' APIs do Windows
+    ' ✅ CACHE DE IMAGENS - Declarações necessárias
+    Private Shared cacheImagens As New Dictionary(Of String, Image)
+    Private Shared cacheStatusImagens As New Dictionary(Of String, String)
+    Private Shared ultimaLimpezaImagensCache As DateTime = DateTime.MinValue
+    Private Const CACHE_IMAGENS_TIMEOUT_MINUTES As Integer = 30
+
+    ' APIs do Windows para otimização de redesenho
     <DllImport("user32.dll")>
     Private Shared Function SendMessage(hWnd As IntPtr, Msg As Integer, wParam As Boolean, lParam As Integer) As Integer
     End Function
@@ -117,6 +122,17 @@ Public Class UcReposicaoEstoque
             .BackgroundImage = Nothing
             .BackgroundImageLayout = ImageLayout.Center
         End With
+    End Sub
+
+    ' ✅ MÉTODO PÚBLICO: Permitir inicialização externa
+    Public Sub InicializarDadosSeNecessario()
+        Try
+            If Not dadosCarregados Then
+                InicializarDados()
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.InicializarDadosSeNecessario")
+        End Try
     End Sub
 
     ' Lazy loading - só carrega dados quando necessário
@@ -723,50 +739,45 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
-    ' Carregamento assíncrono de imagem otimizado - COM CACHE DE IMAGENS
+    ' ✅ CARREGAMENTO DE IMAGEM OTIMIZADO COM CACHE COMPLETO (VERSÃO FINAL)
     Private Sub CarregarImagemProdutoAsync(codigoProduto As String)
         If isCarregandoImagem Then Return
 
         Try
+            LogErros.RegistrarInfo($"🔍 Iniciando carregamento de imagem para: {codigoProduto}", "CarregarImagem")
+
             ' ✅ VERIFICAR CACHE DE IMAGEM PRIMEIRO
             If cacheImagens.ContainsKey(codigoProduto) Then
+                LogErros.RegistrarInfo($"📦 Imagem encontrada no cache para: {codigoProduto}", "CarregarImagem")
                 ' Imagem já está no cache - aplicar imediatamente
                 Try
-                    If pbProduto.Image IsNot Nothing Then
-                        pbProduto.Image.Dispose()
-                        pbProduto.Image = Nothing
-                    End If
-
-                    Dim imagemCache = cacheImagens(codigoProduto)
-                    If imagemCache IsNot Nothing Then
-                        ' Criar uma cópia da imagem para evitar problemas de referência
-                        pbProduto.Image = New Bitmap(imagemCache)
-                        grpImagem.Text = "🖼️ Imagem do Produto"
-                        LogErros.RegistrarInfo($"📸 Imagem aplicada do cache: {codigoProduto}", "CarregarImagem")
+                    If Me.InvokeRequired Then
+                        Me.Invoke(Sub() AplicarImagemDoCache(codigoProduto))
                     Else
-                        pbProduto.Image = Nothing
-                        grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+                        AplicarImagemDoCache(codigoProduto)
                     End If
                     Return
                 Catch cacheEx As Exception
                     LogErros.RegistrarErro(cacheEx, "CarregarImagemProdutoAsync - Cache")
                     ' Continue para carregamento normal se cache falhar
                 End Try
+            Else
+                LogErros.RegistrarInfo($"❌ Imagem NÃO encontrada no cache para: {codigoProduto}", "CarregarImagem")
             End If
 
             ' ✅ VERIFICAR STATUS CACHE - se já tentou carregar antes
             If cacheStatusImagens.ContainsKey(codigoProduto) Then
                 Dim status = cacheStatusImagens(codigoProduto)
+                LogErros.RegistrarInfo($"📊 Status cache para {codigoProduto}: {status}", "CarregarImagem")
+
                 If status = "NAO_ENCONTRADA" Then
                     ' Já tentou e não encontrou - não tentar novamente
-                    pbProduto.Image = Nothing
-                    grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+                    AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Não disponível", Nothing)
                     LogErros.RegistrarInfo($"⚠️ Status cache: imagem não disponível para {codigoProduto}", "CarregarImagem")
                     Return
                 ElseIf status = "ERRO" Then
                     ' Já tentou e deu erro - não tentar novamente
-                    pbProduto.Image = Nothing
-                    grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+                    AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Erro", Nothing)
                     LogErros.RegistrarInfo($"❌ Status cache: erro anterior para {codigoProduto}", "CarregarImagem")
                     Return
                 End If
@@ -775,11 +786,7 @@ Public Class UcReposicaoEstoque
             isCarregandoImagem = True
 
             ' ✅ Atualizar UI no thread principal
-            If Me.InvokeRequired Then
-                Me.Invoke(Sub() grpImagem.Text = "🖼️ Imagem do Produto - Carregando...")
-            Else
-                grpImagem.Text = "🖼️ Imagem do Produto - Carregando..."
-            End If
+            AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Carregando...", Nothing)
 
             Task.Run(Sub()
                          Try
@@ -788,11 +795,14 @@ Public Class UcReposicaoEstoque
                              Dim caminhoEncontrado As String = ""
                              Dim errosDetalhes As New List(Of String)
 
+                             LogErros.RegistrarInfo($"🔄 Procurando arquivos de imagem para: {codigoProduto}", "CarregarImagem")
+
                              ' Procurar imagem com diferentes extensões
                              For Each extensao As String In ConfiguracaoApp.EXTENSOES_IMAGEM
                                  Dim caminhoImagem = Path.Combine(ConfiguracaoApp.CAMINHO_IMAGENS, $"{codigoProduto}{extensao}")
 
                                  If File.Exists(caminhoImagem) Then
+                                     LogErros.RegistrarInfo($"📁 Arquivo encontrado: {caminhoImagem}", "CarregarImagem")
                                      Try
                                          Dim fileInfo As New FileInfo(caminhoImagem)
 
@@ -818,7 +828,7 @@ Public Class UcReposicaoEstoque
                                          If imagemCarregada IsNot Nothing Then
                                              caminhoEncontrado = caminhoImagem
                                              imagemEncontrada = True
-                                             LogErros.RegistrarInfo($"✅ Imagem carregada: {caminhoImagem} ({fileInfo.Length / 1024:F0}KB)", "CarregarImagem")
+                                             LogErros.RegistrarInfo($"✅ Imagem carregada com sucesso: {caminhoImagem} ({fileInfo.Length / 1024:F0}KB)", "CarregarImagem")
                                              Exit For
                                          Else
                                              errosDetalhes.Add($"{extensao}: formato inválido")
@@ -836,63 +846,23 @@ Public Class UcReposicaoEstoque
 
                              ' ✅ ARMAZENAR NO CACHE
                              If imagemEncontrada Then
+                                 LogErros.RegistrarInfo($"💾 Armazenando no cache: {codigoProduto}", "CarregarImagem")
                                  cacheImagens(codigoProduto) = imagemCarregada
                                  cacheStatusImagens(codigoProduto) = "ENCONTRADA"
+                                 AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto", imagemCarregada)
+                                 LogErros.RegistrarInfo($"📸 Imagem aplicada com sucesso: {caminhoEncontrado}", "CarregarImagem")
                              Else
+                                 LogErros.RegistrarInfo($"💾 Armazenando status 'não encontrada' no cache: {codigoProduto}", "CarregarImagem")
                                  cacheImagens(codigoProduto) = Nothing
                                  cacheStatusImagens(codigoProduto) = "NAO_ENCONTRADA"
+                                 AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Não disponível", Nothing)
                                  LogErros.RegistrarInfo($"❌ Nenhuma imagem válida para {codigoProduto}: {String.Join("; ", errosDetalhes)}", "CarregarImagem")
                              End If
-
-                             ' ✅ Atualizar UI
-                             If Me.IsDisposed OrElse Me.Disposing Then Return
-
-                             Me.Invoke(Sub()
-                                           Try
-                                               If Me.IsDisposed OrElse pbProduto.IsDisposed Then Return
-
-                                               ' Limpar imagem anterior
-                                               If pbProduto.Image IsNot Nothing Then
-                                                   pbProduto.Image.Dispose()
-                                                   pbProduto.Image = Nothing
-                                               End If
-
-                                               If imagemEncontrada AndAlso imagemCarregada IsNot Nothing Then
-                                                   ' Criar cópia da imagem para o PictureBox
-                                                   pbProduto.Image = New Bitmap(imagemCarregada)
-                                                   grpImagem.Text = "🖼️ Imagem do Produto"
-                                                   LogErros.RegistrarInfo($"📸 Imagem aplicada com sucesso: {caminhoEncontrado}", "CarregarImagem")
-                                               Else
-                                                   pbProduto.Image = Nothing
-                                                   grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
-                                                   LogErros.RegistrarInfo($"⚠️ Nenhuma imagem encontrada para: {codigoProduto}", "CarregarImagem")
-                                               End If
-
-                                           Catch uiEx As Exception
-                                               LogErros.RegistrarErro(uiEx, "CarregarImagemProdutoAsync - UI Update")
-                                               grpImagem.Text = "🖼️ Imagem do Produto - Erro"
-                                               cacheStatusImagens(codigoProduto) = "ERRO"
-                                           End Try
-                                       End Sub)
 
                          Catch ex As Exception
                              LogErros.RegistrarErro(ex, $"UcReposicaoEstoque.CarregarImagemProdutoAsync({codigoProduto})")
                              cacheStatusImagens(codigoProduto) = "ERRO"
-
-                             If Not Me.IsDisposed Then
-                                 Try
-                                     Me.Invoke(Sub()
-                                                   If Not pbProduto.IsDisposed Then
-                                                       pbProduto.Image = Nothing
-                                                   End If
-                                                   If Not grpImagem.IsDisposed Then
-                                                       grpImagem.Text = "🖼️ Imagem do Produto - Erro"
-                                                   End If
-                                               End Sub)
-                                 Catch
-                                     ' Ignorar se não conseguir atualizar UI
-                                 End Try
-                             End If
+                             AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Erro", Nothing)
                          Finally
                              isCarregandoImagem = False
                          End Try
@@ -902,15 +872,87 @@ Public Class UcReposicaoEstoque
             LogErros.RegistrarErro(ex, $"UcReposicaoEstoque.CarregarImagemProdutoAsync({codigoProduto}) - Outer")
             isCarregandoImagem = False
             cacheStatusImagens(codigoProduto) = "ERRO"
+            AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Erro", Nothing)
+        End Try
+    End Sub
+
+    ' ✅ MÉTODO AUXILIAR: Aplicar imagem do cache (CORRIGIDO - VERSÃO FINAL)
+    Private Sub AplicarImagemDoCache(codigoProduto As String)
+        Try
+            If pbProduto.IsDisposed Then Return
+
+            Dim imagemCache = cacheImagens(codigoProduto)
+            If imagemCache IsNot Nothing Then
+                ' ✅ CORREÇÃO FINAL: Sempre aplicar a imagem do cache
+                ' Limpar imagem atual primeiro (sem dispose - está no cache)
+                If pbProduto.Image IsNot Nothing Then
+                    pbProduto.Image = Nothing
+                End If
+
+                ' Aplicar imagem do cache diretamente
+                pbProduto.Image = imagemCache
+                grpImagem.Text = "🖼️ Imagem do Produto"
+                LogErros.RegistrarInfo($"📸 Imagem aplicada do cache: {codigoProduto}", "CarregarImagem")
+            Else
+                ' Limpar imagem se não há imagem no cache
+                If pbProduto.Image IsNot Nothing Then
+                    pbProduto.Image = Nothing
+                End If
+                grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "AplicarImagemDoCache")
+            grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+        End Try
+    End Sub
+
+    ' ✅ MÉTODO AUXILIAR: Aplicar status da imagem (thread-safe)
+    Private Sub AplicarImagemStatus(codigoProduto As String, statusTexto As String, imagem As Image)
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() AplicarImagemStatusSeguro(codigoProduto, statusTexto, imagem))
+            Else
+                AplicarImagemStatusSeguro(codigoProduto, statusTexto, imagem)
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "AplicarImagemStatus")
+        End Try
+    End Sub
+
+    ' ✅ MÉTODO AUXILIAR: Aplicar status da imagem (CORRIGIDO - VERSÃO FINAL)
+    Private Sub AplicarImagemStatusSeguro(codigoProduto As String, statusTexto As String, imagem As Image)
+        Try
+            If Me.IsDisposed OrElse pbProduto.IsDisposed Then Return
+
+            ' ✅ CORREÇÃO FINAL: Sempre aplicar a nova imagem
+            ' Limpar imagem atual (sem dispose - pode estar no cache)
+            If pbProduto.Image IsNot Nothing Then
+                pbProduto.Image = Nothing
+            End If
+
+            ' Aplicar nova imagem
+            If imagem IsNot Nothing Then
+                pbProduto.Image = imagem
+            End If
+
+            If Not grpImagem.IsDisposed Then
+                grpImagem.Text = statusTexto
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "AplicarImagemStatusSeguro")
             Try
-                grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+                If Not grpImagem.IsDisposed Then
+                    grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+                End If
             Catch
                 ' Ignorar se não conseguir atualizar UI
             End Try
         End Try
     End Sub
 
-    ' ✅ NOVO MÉTODO: Tentativa robusta de carregamento de imagem
+    ' ✅ MÉTODO ROBUSTO: Tentativa de carregamento de imagem
     Private Function TentarCarregarImagem(caminhoArquivo As String) As Image
         Try
             ' MÉTODO 1: Carregamento direto (mais simples)
@@ -957,7 +999,7 @@ Public Class UcReposicaoEstoque
         End Try
     End Function
 
-    ' ✅ NOVO MÉTODO: Validar header básico da imagem
+    ' ✅ VALIDADOR DE HEADER: Verificar formato básico da imagem
     Private Function ValidarHeaderImagem(bytes() As Byte) As Boolean
         Try
             If bytes Is Nothing OrElse bytes.Length < 10 Then Return False
@@ -991,6 +1033,60 @@ Public Class UcReposicaoEstoque
             Return False
         End Try
     End Function
+
+    ' ✅ LIMPEZA AUTOMÁTICA DE CACHE DE IMAGENS (CORRIGIDA)
+    Private Sub LimpezaAutomaticaCacheImagens()
+        Try
+            ' Executar limpeza a cada 30 minutos
+            If DateTime.Now.Subtract(ultimaLimpezaImagensCache).TotalMinutes > CACHE_IMAGENS_TIMEOUT_MINUTES Then
+                Dim itensRemovidos As Integer = 0
+
+                ' ✅ CORREÇÃO: Não remover imagem atualmente em uso
+                Dim imagemAtualEmUso As Image = Nothing
+                If pbProduto IsNot Nothing AndAlso pbProduto.Image IsNot Nothing Then
+                    imagemAtualEmUso = pbProduto.Image
+                End If
+
+                ' Limpar imagens que não foram usadas recentemente, EXCETO a atual
+                Dim chavesParaRemover As New List(Of String)
+
+                For Each kvp In cacheImagens.ToList()
+                    ' ✅ NÃO remover a imagem que está sendo exibida atualmente
+                    If kvp.Value IsNot Nothing AndAlso Not ReferenceEquals(kvp.Value, imagemAtualEmUso) Then
+                        Try
+                            kvp.Value.Dispose()
+                            itensRemovidos += 1
+                            chavesParaRemover.Add(kvp.Key)
+                        Catch
+                            ' Ignorar erros de dispose
+                        End Try
+                    ElseIf kvp.Value Is Nothing Then
+                        ' Remover entradas vazias
+                        chavesParaRemover.Add(kvp.Key)
+                    End If
+                Next
+
+                ' Remover do cache
+                For Each chave In chavesParaRemover
+                    cacheImagens.Remove(chave)
+                    cacheStatusImagens.Remove(chave)
+                Next
+
+                ultimaLimpezaImagensCache = DateTime.Now
+                LogErros.RegistrarInfo($"🧹 Cache de imagens limpo: {itensRemovidos} itens removidos, imagem atual preservada", "LimpezaCacheImagens")
+
+                ' Forçar coleta de lixo apenas se removeu muitos itens
+                If itensRemovidos > 5 Then
+                    GC.Collect()
+                    GC.WaitForPendingFinalizers()
+                    GC.Collect()
+                End If
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "LimpezaAutomaticaCacheImagens")
+        End Try
+    End Sub
 
     ' Configuração de colunas otimizada
     Private Sub ConfigurarColunasEstoqueOtimizado()
@@ -1088,6 +1184,9 @@ Public Class UcReposicaoEstoque
 
             ' Verificar estado do botão periodicamente
             VerificarEstadoBotao()
+
+            ' Limpeza automática de cache de imagens
+            LimpezaAutomaticaCacheImagens()
 
             If dgvProdutos.SelectedRows.Count > 0 Then
                 Dim produtoSelecionadoRow As DataGridViewRow = dgvProdutos.SelectedRows(0)
@@ -1303,8 +1402,10 @@ Public Class UcReposicaoEstoque
         colunasConfiguradas = False
     End Sub
 
+    ' ✅ MÉTODOS PÚBLICOS DE DIAGNÓSTICO E UTILITÁRIOS
+
     ' Método de diagnóstico para medir performance
-    Private Sub DiagnosticarPerformance()
+    Public Sub DiagnosticarPerformance()
         Dim sw As New Stopwatch()
 
         ' Teste 1: Cache estático
@@ -1337,6 +1438,7 @@ Public Class UcReposicaoEstoque
         LogErros.RegistrarInfo($"📊 Aplicação aos grids: {sw.ElapsedMilliseconds}ms", "Diagnóstico")
     End Sub
 
+    ' Limpeza automática de cache
     Private Sub LimpezaAutomaticaCache()
         ' A cada 30 minutos, limpar cache para liberar memória
         If DateTime.Now.Minute = 0 OrElse DateTime.Now.Minute = 30 Then
@@ -1349,6 +1451,72 @@ Public Class UcReposicaoEstoque
         End If
     End Sub
 
+    ' ✅ MÉTODOS PÚBLICOS PARA INTEGRAÇÃO
+
+    ' Forçar atualização externa
+    Public Sub ForcarAtualizacao()
+        Try
+            btnAtualizar.PerformClick()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ForcarAtualizacao")
+        End Try
+    End Sub
+
+    ' Obter informações do estado atual
+    Public Function ObterEstadoAtual() As Dictionary(Of String, Object)
+        Try
+            Dim estado As New Dictionary(Of String, Object)
+
+            estado("DadosCarregados") = dadosCarregados
+            estado("ProdutoSelecionado") = produtoSelecionado
+            estado("FiltroAtual") = filtroAtual
+            estado("TotalProdutos") = If(dgvProdutos.Rows IsNot Nothing, dgvProdutos.Rows.Count, 0)
+            estado("CacheValido") = CacheEstaValido()
+            estado("TabelasEstaticasValidas") = TabelasEstaticasValidas()
+            estado("CacheImagensItens") = cacheImagens.Count
+            estado("BotaoHabilitado") = If(btnAtualizar IsNot Nothing, btnAtualizar.Enabled, False)
+
+            Return estado
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ObterEstadoAtual")
+            Return New Dictionary(Of String, Object)
+        End Try
+    End Function
+
+    ' Aplicar filtro externo
+    Public Sub AplicarFiltroExterno(filtro As String)
+        Try
+            txtFiltro.Text = If(filtro, "")
+            filtroAtual = txtFiltro.Text.Trim()
+            AplicarFiltro()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.AplicarFiltroExterno")
+        End Try
+    End Sub
+
+    ' Selecionar produto específico
+    Public Sub SelecionarProduto(codigoProduto As String)
+        Try
+            If String.IsNullOrEmpty(codigoProduto) Then Return
+
+            For Each row As DataGridViewRow In dgvProdutos.Rows
+                If row.Cells.Count > 0 AndAlso
+                   row.Cells(0).Value IsNot Nothing AndAlso
+                   row.Cells(0).Value.ToString().Equals(codigoProduto, StringComparison.OrdinalIgnoreCase) Then
+
+                    row.Selected = True
+                    dgvProdutos.FirstDisplayedScrollingRowIndex = row.Index
+                    Exit For
+                End If
+            Next
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.SelecionarProduto")
+        End Try
+    End Sub
+
+    ' ✅ MÉTODO DE LIMPEZA E DISPOSE OTIMIZADO (VERSÃO FINAL)
     Protected Overrides Sub Dispose(disposing As Boolean)
         Try
             If disposing Then
@@ -1365,9 +1533,10 @@ Public Class UcReposicaoEstoque
                     filtroTimer = Nothing
                 End If
 
-                ' Limpar imagem
+                ' ✅ CORREÇÃO FINAL: Apenas limpar referência, sem dispose
+                ' As imagens ficam no cache compartilhado
                 If pbProduto IsNot Nothing AndAlso pbProduto.Image IsNot Nothing Then
-                    pbProduto.Image.Dispose()
+                    pbProduto.Image = Nothing
                 End If
 
                 ' Limpar dados
@@ -1376,13 +1545,142 @@ Public Class UcReposicaoEstoque
                     dadosProdutosOriginais = Nothing
                 End If
 
-                ' Limpar cache
+                ' Limpar cache de dados (não de imagens)
                 InvalidarCache()
 
                 powerQueryManager = Nothing
+
+                LogErros.RegistrarInfo("UcReposicaoEstoque disposed (cache de imagens preservado)", "Dispose")
             End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.Dispose")
         Finally
             MyBase.Dispose(disposing)
+        End Try
+    End Sub
+
+    ' ✅ MÉTODO ESTÁTICO PARA LIMPEZA COMPLETA DE CACHE
+    Public Shared Sub LimparCacheGlobal()
+        Try
+            ' Limpar tabelas estáticas
+            tabelasEstaticas.Clear()
+            ultimaAtualizacaoEstatica = DateTime.MinValue
+
+            ' Limpar cache de imagens
+            For Each kvp In cacheImagens.ToList()
+                Try
+                    If kvp.Value IsNot Nothing Then
+                        kvp.Value.Dispose()
+                    End If
+                Catch
+                    ' Ignorar erros de dispose
+                End Try
+            Next
+
+            cacheImagens.Clear()
+            cacheStatusImagens.Clear()
+
+            ' Forçar coleta de lixo
+            GC.Collect()
+            GC.WaitForPendingFinalizers()
+            GC.Collect()
+
+            LogErros.RegistrarInfo("🧹 Cache global limpo completamente", "LimparCacheGlobal")
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "LimparCacheGlobal")
+        End Try
+    End Sub
+
+    ' ✅ PROPRIEDADES PÚBLICAS PARA STATUS
+    Public ReadOnly Property EstaCarregado As Boolean
+        Get
+            Return dadosCarregados
+        End Get
+    End Property
+
+    Public ReadOnly Property ProdutoAtual As String
+        Get
+            Return produtoSelecionado
+        End Get
+    End Property
+
+    Public ReadOnly Property TotalProdutosFiltrados As Integer
+        Get
+            Try
+                Return If(dgvProdutos.Rows IsNot Nothing, dgvProdutos.Rows.Count, 0)
+            Catch
+                Return 0
+            End Try
+        End Get
+    End Property
+
+    Public ReadOnly Property FiltroAplicado As String
+        Get
+            Return filtroAtual
+        End Get
+    End Property
+
+    ' ✅ MÉTODO PÚBLICO PARA ACESSO AO DEBUG (PARA MAINFORM)
+    Public Sub AcessarDebugImagens()
+        DebugCacheImagens()
+    End Sub
+
+    ' ✅ MÉTODO DE DEBUG PARA INVESTIGAR CACHE DE IMAGENS
+    Public Sub DebugCacheImagens()
+        Try
+            LogErros.RegistrarInfo("=== DEBUG CACHE DE IMAGENS ===", "DebugCache")
+            LogErros.RegistrarInfo($"Total de itens no cache: {cacheImagens.Count}", "DebugCache")
+            LogErros.RegistrarInfo($"Total de status no cache: {cacheStatusImagens.Count}", "DebugCache")
+            LogErros.RegistrarInfo($"Produto atualmente selecionado: {produtoSelecionado}", "DebugCache")
+            LogErros.RegistrarInfo($"Imagem atual no PictureBox: {If(pbProduto.Image IsNot Nothing, "SIM", "NÃO")}", "DebugCache")
+
+            For Each kvp In cacheImagens
+                Dim status = If(cacheStatusImagens.ContainsKey(kvp.Key), cacheStatusImagens(kvp.Key), "SEM_STATUS")
+                LogErros.RegistrarInfo($"Cache: {kvp.Key} -> Imagem: {If(kvp.Value IsNot Nothing, "SIM", "NÃO")} | Status: {status}", "DebugCache")
+            Next
+
+            LogErros.RegistrarInfo("=== FIM DEBUG CACHE ===", "DebugCache")
+
+            ' Também mostrar no MessageBox para debug visual
+            Dim msg = $"Cache de Imagens:{vbCrLf}" &
+                     $"Total: {cacheImagens.Count} itens{vbCrLf}" &
+                     $"Produto atual: {produtoSelecionado}{vbCrLf}" &
+                     $"PictureBox tem imagem: {If(pbProduto.Image IsNot Nothing, "SIM", "NÃO")}{vbCrLf}{vbCrLf}"
+
+            For Each kvp In cacheImagens.Take(5) ' Mostrar apenas os 5 primeiros
+                Dim status = If(cacheStatusImagens.ContainsKey(kvp.Key), cacheStatusImagens(kvp.Key), "SEM_STATUS")
+                msg += $"{kvp.Key}: {If(kvp.Value IsNot Nothing, "✅", "❌")} ({status}){vbCrLf}"
+            Next
+
+            MessageBox.Show(msg, "Debug Cache Imagens", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "DebugCacheImagens")
+        End Try
+    End Sub
+
+    ' ✅ MÉTODO PARA FORÇAR RECARREGAMENTO DE IMAGEM (PARA DEBUG)
+    Public Sub ForcarRecarregamentoImagem(codigoProduto As String)
+        Try
+            ' Remover do cache
+            If cacheImagens.ContainsKey(codigoProduto) Then
+                If cacheImagens(codigoProduto) IsNot Nothing Then
+                    cacheImagens(codigoProduto).Dispose()
+                End If
+                cacheImagens.Remove(codigoProduto)
+            End If
+
+            If cacheStatusImagens.ContainsKey(codigoProduto) Then
+                cacheStatusImagens.Remove(codigoProduto)
+            End If
+
+            ' Recarregar
+            CarregarImagemAsync(codigoProduto)
+            LogErros.RegistrarInfo($"Forçado recarregamento de imagem para: {codigoProduto}", "ForcarRecarregamento")
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "ForcarRecarregamentoImagem")
         End Try
     End Sub
 
