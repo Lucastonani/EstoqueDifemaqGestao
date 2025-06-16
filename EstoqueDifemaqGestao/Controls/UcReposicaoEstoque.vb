@@ -581,6 +581,7 @@ Public Class UcReposicaoEstoque
            cacheVendas.ContainsKey($"vendas_{codigoProduto}")
     End Function
 
+    ' ✅ MÉTODO AUXILIAR MELHORADO: Aplicar dados do cache E carregar imagem
     Private Sub AplicarDadosDoCache(codigoProduto As String)
         Try
             PararRedesenhoCompleto()
@@ -594,6 +595,9 @@ Public Class UcReposicaoEstoque
                 grpEstoque.Text = $"📊 Estoque Atual ({dgvEstoque.Rows.Count} registros)"
                 grpCompras.Text = $"📈 Compras ({dgvCompras.Rows.Count} registros)"
                 grpVendas.Text = $"📉 Vendas ({dgvVendas.Rows.Count} registros)"
+
+                LogErros.RegistrarInfo($"✅ Dados aplicados do cache para produto: {codigoProduto}", "AplicarDadosDoCache")
+
             Finally
                 ReabilitarRedesenhoCompleto()
             End Try
@@ -642,6 +646,9 @@ Public Class UcReposicaoEstoque
                 AplicarDadosDoCache(codigoProduto)
                 sw.Stop()
                 LogErros.RegistrarInfo($"✅ Cache hit - Total: {sw.ElapsedMilliseconds}ms", "CarregarDadosProdutoUltraRapido")
+
+                ' ✅ CORREÇÃO: SEMPRE carregar imagem, mesmo com cache de dados
+                CarregarImagemAsync(codigoProduto)
                 Return
             End If
 
@@ -876,34 +883,57 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
-    ' ✅ MÉTODO AUXILIAR: Aplicar imagem do cache (CORRIGIDO - VERSÃO FINAL)
+    ' ✅ MÉTODO AUXILIAR: Aplicar imagem do cache (CORRIGIDO)
     Private Sub AplicarImagemDoCache(codigoProduto As String)
         Try
             If pbProduto.IsDisposed Then Return
 
             Dim imagemCache = cacheImagens(codigoProduto)
             If imagemCache IsNot Nothing Then
-                ' ✅ CORREÇÃO FINAL: Sempre aplicar a imagem do cache
-                ' Limpar imagem atual primeiro (sem dispose - está no cache)
-                If pbProduto.Image IsNot Nothing Then
-                    pbProduto.Image = Nothing
-                End If
+                ' ✅ CORREÇÃO: Aplicar diretamente SEM limpar primeiro
+                ' O problema era: pbProduto.Image = Nothing estava causando a limpeza
 
                 ' Aplicar imagem do cache diretamente
                 pbProduto.Image = imagemCache
                 grpImagem.Text = "🖼️ Imagem do Produto"
                 LogErros.RegistrarInfo($"📸 Imagem aplicada do cache: {codigoProduto}", "CarregarImagem")
             Else
-                ' Limpar imagem se não há imagem no cache
+                ' Limpar imagem apenas se NÃO há imagem no cache
                 If pbProduto.Image IsNot Nothing Then
                     pbProduto.Image = Nothing
                 End If
                 grpImagem.Text = "🖼️ Imagem do Produto - Não disponível"
+                LogErros.RegistrarInfo($"❌ Cache vazio para: {codigoProduto}", "CarregarImagem")
             End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "AplicarImagemDoCache")
             grpImagem.Text = "🖼️ Imagem do Produto - Erro"
+        End Try
+    End Sub
+
+    ' ✅ MÉTODO AUXILIAR ADICIONAL: Verificar estado do cache
+    Private Sub VerificarEstadoCache(codigoProduto As String)
+        Try
+            Dim temCache = cacheImagens.ContainsKey(codigoProduto)
+            Dim imagemCache = If(temCache, cacheImagens(codigoProduto), Nothing)
+            Dim imagemAtual = pbProduto.Image
+
+            LogErros.RegistrarInfo($"🔍 Estado Cache - Produto: {codigoProduto}", "VerificarEstadoCache")
+            LogErros.RegistrarInfo($"📦 Tem no cache: {temCache}", "VerificarEstadoCache")
+            LogErros.RegistrarInfo($"🖼️ Imagem cache é Nothing: {imagemCache Is Nothing}", "VerificarEstadoCache")
+            LogErros.RegistrarInfo($"📺 Imagem PictureBox é Nothing: {imagemAtual Is Nothing}", "VerificarEstadoCache")
+
+            If temCache AndAlso imagemCache IsNot Nothing Then
+                LogErros.RegistrarInfo($"✅ Cache válido - aplicando imagem", "VerificarEstadoCache")
+            ElseIf temCache AndAlso imagemCache Is Nothing Then
+                LogErros.RegistrarInfo($"⚠️ Cache com valor Nothing - produto sem imagem", "VerificarEstadoCache")
+            Else
+                LogErros.RegistrarInfo($"❌ Produto não está no cache", "VerificarEstadoCache")
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "VerificarEstadoCache")
         End Try
     End Sub
 
