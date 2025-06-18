@@ -82,48 +82,54 @@ Public Class MainForm
         Try
             If isDisposing OrElse Me.IsDisposed Then Return
 
-            ' Mostrar cursor de carregamento apenas se necessário
-            Dim mostrarCursor = pnlConteudo.Controls.Count > 0
-            If mostrarCursor Then
-                Me.Cursor = Cursors.WaitCursor
-                AtualizarStatus("Carregando módulo...")
-            End If
-
-            ' Limpar painel atual
+            Me.Cursor = Cursors.WaitCursor
+            AtualizarStatus("Carregando módulo...")
             LimparPainelConteudo()
 
-            ' Criar instância do UserControl
             Dim novoUserControl As UserControl = CType(Activator.CreateInstance(tipoUserControl), UserControl)
 
-            ' Configurar e adicionar ao painel
             With novoUserControl
                 .Dock = DockStyle.Fill
                 .Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
+                .AutoSize = False
+                .AutoSizeMode = AutoSizeMode.GrowOnly
+                .Size = pnlConteudo.ClientSize
+                .MinimumSize = New Size(1200, 600)
             End With
 
             pnlConteudo.Controls.Add(novoUserControl)
+            pnlConteudo.PerformLayout()
+            novoUserControl.PerformLayout()
 
-            ' Armazenar referência se for UcReposicaoEstoque
             If TypeOf novoUserControl Is UcReposicaoEstoque Then
                 ucReposicaoEstoque = CType(novoUserControl, UcReposicaoEstoque)
+
+                Task.Run(Sub()
+                             Try
+                                 Thread.Sleep(200)
+                                 Me.Invoke(Sub()
+                                               Try
+                                                   ucReposicaoEstoque.MaximizarNoContainer()
+                                               Catch ex As Exception
+                                                   LogErros.RegistrarErro(ex, "CarregarUserControl_MaximizarContainer")
+                                               End Try
+                                           End Sub)
+                             Catch ex As Exception
+                                 LogErros.RegistrarErro(ex, "CarregarUserControl_Task")
+                             End Try
+                         End Sub)
             End If
 
-            ' Forçar redesenho apenas se necessário
-            If mostrarCursor Then
-                pnlConteudo.Refresh()
-                Me.Refresh()
-            End If
-
-            LogErros.RegistrarInfo($"UserControl carregado: {tipoUserControl.Name}", "MainForm.CarregarUserControl")
+            pnlConteudo.Refresh()
+            Me.Refresh()
+            LogErros.RegistrarInfo($"UserControl carregado e maximizado: {tipoUserControl.Name}", "MainForm.CarregarUserControl")
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, $"MainForm.CarregarUserControl({tipoUserControl.Name})")
             MessageBox.Show($"Erro ao carregar módulo: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             Me.Cursor = Cursors.Default
-            If pnlConteudo.Controls.Count > 0 Then
-                AtualizarStatus("Pronto")
-            End If
+            AtualizarStatus("Pronto")
         End Try
     End Sub
 
@@ -513,6 +519,34 @@ Public Class MainForm
                         AtualizarStatus("Cache global de imagens limpo")
                         MessageBox.Show("Cache global de imagens foi limpo!", "Cache Limpo", MessageBoxButtons.OK, MessageBoxIcon.Information)
                         e.Handled = True
+
+                    Case Keys.M
+                        ' Maximizar UserControl no container
+                        If ucReposicaoEstoque IsNot Nothing Then
+                            ucReposicaoEstoque.ForcarMaximizacao()
+                            AtualizarStatus("UserControl maximizado")
+                        Else
+                            MessageBox.Show("UserControl não está carregado", "Maximização", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                        End If
+                        e.Handled = True
+
+                    Case Keys.S
+                        ' Mostrar informações de tamanho
+                        If ucReposicaoEstoque IsNot Nothing Then
+                            Dim info = $"Informações de Tamanho:{Environment.NewLine}{Environment.NewLine}" &
+                                      $"MainForm: {Me.Size}{Environment.NewLine}" &
+                                      $"pnlConteudo: {pnlConteudo.Size}{Environment.NewLine}" &
+                                      $"UserControl: {ucReposicaoEstoque.Size}{Environment.NewLine}" &
+                                      $"Parent: {ucReposicaoEstoque.Parent?.Size}{Environment.NewLine}" &
+                                      $"Dock: {ucReposicaoEstoque.Dock}"
+
+                            MessageBox.Show(info, "Informações de Tamanho", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                            AtualizarStatus("Informações de tamanho exibidas")
+                        Else
+                            MessageBox.Show("UserControl não está carregado", "Informações", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                        End If
+                        e.Handled = True
+
                 End Select
             End If
 

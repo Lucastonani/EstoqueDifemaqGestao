@@ -1714,4 +1714,30 @@ Public Class UcReposicaoEstoque
         End Try
     End Sub
 
+    Public Sub MaximizarNoContainer()
+        Try
+            LogErros.RegistrarInfo($"🖥️ Maximizando UserControl - Container: {Me.Parent?.Size}", "MaximizarNoContainer")
+
+            If Me.Parent IsNot Nothing Then
+                Me.Size = Me.Parent.ClientSize
+                Me.Dock = DockStyle.Fill
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "MaximizarNoContainer")
+        End Try
+    End Sub
+
+    ' ✅ 2. MÉTODO PÚBLICO PARA FORÇAR MAXIMIZAÇÃO (MANTER)
+    Public Sub ForcarMaximizacao()
+        Try
+            LogErros.RegistrarInfo("🔧 Forçando maximização manual", "ForcarMaximizacao")
+            MaximizarNoContainer()
+            MessageBox.Show($"UserControl maximizado!{Environment.NewLine}Tamanho atual: {Me.Size}",
+                           "Maximização", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "ForcarMaximizacao")
+        End Try
+    End Sub
+
 End Class
