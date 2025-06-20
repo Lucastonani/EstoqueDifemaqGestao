@@ -11,13 +11,36 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <DefineConstants>VSTO40,UseOfficeInterop</DefineConstants>
     <OfficeApplication>Excel</OfficeApplication>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
-    <BootstrapperComponentsLocation>HomeSite</BootstrapperComponentsLocation>
     <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
     <ProjectGuid>{7E1822CB-A3BC-29E7-E460-EC460D07C2E9}</ProjectGuid>
     <SolutionID>ff41038d-8be8-45b2-a640-01635df05480</SolutionID>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <PublishUrl>publish\</PublishUrl>
+    <InstallUrl />
+    <TargetCulture>en</TargetCulture>
+    <ApplicationVersion>1.0.0.0</ApplicationVersion>
+    <AutoIncrementApplicationRevision>true</AutoIncrementApplicationRevision>
+    <UpdateEnabled>true</UpdateEnabled>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>days</UpdateIntervalUnits>
+    <IsWebBootstrapper>False</IsWebBootstrapper>
+    <ProductName>EstoqueDifemaqGestao</ProductName>
+    <PublisherName />
+    <SupportUrl />
+    <FriendlyName>EstoqueDifemaqGestao</FriendlyName>
+    <OfficeApplicationDescription />
   </PropertyGroup>
   <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.8">
+      <Visible>False</Visible>
+      <ProductName>Microsoft .NET Framework 4.8 %28x86 and x64%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
     <BootstrapperPackage Include="Microsoft.VSTORuntime.4.0">
       <Visible>False</Visible>
       <ProductName>Microsoft Visual Studio 2010 Tools for Office Runtime %28x86 and x64%29</ProductName>
@@ -39,6 +62,8 @@
     <RegisterForComInterop>false</RegisterForComInterop>
     <RemoveIntegerChecks>false</RemoveIntegerChecks>
     <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <RunCodeAnalysis>false</RunCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DefineConstants>
@@ -160,22 +185,23 @@
     <Import Include="Excel = Microsoft.Office.Interop.Excel" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ColumnConfig.vb" />
+    <Compile Include="Core\ColumnConfig.vb" />
     <Compile Include="Config\ConfiguracaoApp.vb" />
     <Compile Include="Config\DatabaseConfig.vb" />
+    <Compile Include="Core\PowerQueryManagerOtimizado.vb" />
     <Compile Include="Helpers\DataHelper.vb" />
-    <Compile Include="DeploymentChecklist.vb" />
+    <Compile Include="Services\DeploymentChecklist.vb" />
     <Compile Include="Helpers\Extensions.vb" />
     <Compile Include="Helpers\LogErros.vb" />
-    <Compile Include="IntegrationTests.vb" />
-    <Compile Include="MainForm.Designer.vb">
+    <Compile Include="Services\IntegrationTests.vb" />
+    <Compile Include="Forms\MainForm.Designer.vb">
       <DependentUpon>MainForm.vb</DependentUpon>
     </Compile>
-    <Compile Include="MainForm.vb">
+    <Compile Include="Forms\MainForm.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="My Project\AssemblyInfo.vb" />
-    <Compile Include="PerformanceTests.vb" />
+    <Compile Include="Services\PerformanceTests.vb" />
     <Compile Include="SheetEstoqueVisao.Designer.vb">
       <DependentUpon>SheetEstoqueVisao.Designer.xml</DependentUpon>
     </Compile>
@@ -224,11 +250,11 @@
     <Compile Include="Planilha8.vb">
       <DependentUpon>Tratamento dos dados.xlsx</DependentUpon>
     </Compile>
-    <Compile Include="PowerQueryManager.vb" />
-    <Compile Include="SplashForm.Designer.vb">
+    <Compile Include="Core\PowerQueryManager.vb" />
+    <Compile Include="Forms\SplashForm.Designer.vb">
       <DependentUpon>SplashForm.vb</DependentUpon>
     </Compile>
-    <Compile Include="SplashForm.vb">
+    <Compile Include="Forms\SplashForm.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Tests\TestFramework.vb" />
@@ -257,6 +283,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <None Include="EstoqueDifemaq.ruleset" />
     <None Include="EstoqueDifemaqGestao_TemporaryKey.pfx" />
     <None Include="My Project\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
