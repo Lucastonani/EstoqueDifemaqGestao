@@ -866,7 +866,7 @@ Public Class UcReposicaoEstoque
             Task.Run(Sub()
                          Try
                              ' Atualizar Power Query
-                             powerQueryManager = powerQueryManager.GetInstance()
+                             powerQueryManager = PowerQueryManager.GetInstance()
                              If powerQueryManager IsNot Nothing Then
                                  powerQueryManager.AtualizarDados()
                              End If
@@ -930,7 +930,7 @@ Public Class UcReposicaoEstoque
     Private Sub CarregarProdutos()
         Try
             If powerQueryManager Is Nothing Then
-                powerQueryManager = powerQueryManager.GetInstance()
+                powerQueryManager = PowerQueryManager.GetInstance()
             End If
 
             If powerQueryManager IsNot Nothing Then
@@ -1546,6 +1546,125 @@ Public Class UcReposicaoEstoque
             End If
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.DefinirProdutoSelecionado")
+        End Try
+    End Sub
+
+    ' Propriedade para obter o produto atualmente selecionado
+    Public ReadOnly Property ProdutoAtual As String
+        Get
+            Return produtoSelecionado
+        End Get
+    End Property
+
+    ' Método para maximizar no container
+    Public Sub MaximizarNoContainer()
+        Try
+            If Me.Parent IsNot Nothing Then
+                Me.Dock = DockStyle.Fill
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.MaximizarNoContainer")
+        End Try
+    End Sub
+
+    ' Método para forçar maximização
+    Public Sub ForcarMaximizacao()
+        Try
+            MaximizarNoContainer()
+            Me.BringToFront()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ForcarMaximizacao")
+        End Try
+    End Sub
+
+    ' Método para acessar debug de imagens
+    Public Sub AcessarDebugImagens()
+        Try
+            Dim debugInfo As New System.Text.StringBuilder()
+            debugInfo.AppendLine("=== DEBUG DE IMAGENS ===")
+            debugInfo.AppendLine($"Cache de imagens: {cacheImagens.Count} itens")
+            debugInfo.AppendLine($"Cache de status: {cacheStatusImagens.Count} itens")
+            debugInfo.AppendLine($"Produto selecionado: {produtoSelecionado}")
+            debugInfo.AppendLine($"Carregando imagem: {isCarregandoImagem}")
+            debugInfo.AppendLine()
+
+            debugInfo.AppendLine("Itens no cache:")
+            For Each kvp In cacheImagens
+                debugInfo.AppendLine($"  - {kvp.Key}: {If(kvp.Value IsNot Nothing, "OK", "NULL")}")
+            Next
+
+            debugInfo.AppendLine()
+            debugInfo.AppendLine("Status no cache:")
+            For Each kvp In cacheStatusImagens
+                debugInfo.AppendLine($"  - {kvp.Key}: {kvp.Value}")
+            Next
+
+            MessageBox.Show(debugInfo.ToString(), "Debug de Imagens", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.AcessarDebugImagens")
+        End Try
+    End Sub
+
+    ' Método para forçar recarregamento de imagem
+    Public Sub ForcarRecarregamentoImagem(codigoProduto As String)
+        Try
+            ' Remover do cache
+            If cacheImagens.ContainsKey(codigoProduto) Then
+                Dim img = cacheImagens(codigoProduto)
+                If img IsNot Nothing AndAlso Not ReferenceEquals(img, pbProduto.Image) Then
+                    img.Dispose()
+                End If
+                cacheImagens.Remove(codigoProduto)
+            End If
+
+            If cacheStatusImagens.ContainsKey(codigoProduto) Then
+                cacheStatusImagens.Remove(codigoProduto)
+            End If
+
+            ' Recarregar
+            CarregarImagemAsync(codigoProduto)
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ForcarRecarregamentoImagem")
+        End Try
+    End Sub
+
+    ' Método para limpar cache global
+    Public Sub LimparCacheGlobal()
+        Try
+            ' Preservar imagem atual
+            Dim imagemAtual = pbProduto.Image
+
+            ' Limpar cache de imagens
+            For Each kvp In cacheImagens
+                If kvp.Value IsNot Nothing AndAlso Not ReferenceEquals(kvp.Value, imagemAtual) Then
+                    Try
+                        kvp.Value.Dispose()
+                    Catch
+                        ' Ignorar erros de dispose
+                    End Try
+                End If
+            Next
+
+            cacheImagens.Clear()
+            cacheStatusImagens.Clear()
+
+            ' Limpar outros caches
+            InvalidarCacheCompleto()
+
+            ' Forçar coleta de lixo
+            GC.Collect()
+            GC.WaitForPendingFinalizers()
+            GC.Collect()
+
+            MessageBox.Show("Cache global limpo com sucesso!", "Limpeza de Cache",
+                          MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.LimparCacheGlobal")
+            MessageBox.Show($"Erro ao limpar cache: {ex.Message}", "Erro",
+                          MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
