@@ -24,6 +24,8 @@ Partial Class UcReposicaoEstoque
         Me.txtFiltro = New System.Windows.Forms.TextBox()
         Me.lblFiltro = New System.Windows.Forms.Label()
         Me.btnAtualizar = New System.Windows.Forms.Button()
+        Me.btnAtualizarPowerQuery = New System.Windows.Forms.Button()
+        Me.lblUltimaAtualizacao = New System.Windows.Forms.Label()
         Me.grpInclusaoManual = New System.Windows.Forms.GroupBox()
         Me.TableLayoutPanel1 = New System.Windows.Forms.TableLayoutPanel()
         Me.lblCodigoManual = New System.Windows.Forms.Label()
@@ -194,10 +196,12 @@ Partial Class UcReposicaoEstoque
         Me.pnlFiltros.Controls.Add(Me.txtFiltro)
         Me.pnlFiltros.Controls.Add(Me.lblFiltro)
         Me.pnlFiltros.Controls.Add(Me.btnAtualizar)
+        Me.pnlFiltros.Controls.Add(Me.btnAtualizarPowerQuery)
+        Me.pnlFiltros.Controls.Add(Me.lblUltimaAtualizacao)
         Me.pnlFiltros.Dock = System.Windows.Forms.DockStyle.Top
         Me.pnlFiltros.Location = New System.Drawing.Point(8, 26)
         Me.pnlFiltros.Name = "pnlFiltros"
-        Me.pnlFiltros.Size = New System.Drawing.Size(434, 40)
+        Me.pnlFiltros.Size = New System.Drawing.Size(434, 70)
         Me.pnlFiltros.TabIndex = 0
         '
         'txtFiltro
@@ -207,7 +211,7 @@ Partial Class UcReposicaoEstoque
         Me.txtFiltro.Font = New System.Drawing.Font("Segoe UI", 9.0!)
         Me.txtFiltro.Location = New System.Drawing.Point(50, 9)
         Me.txtFiltro.Name = "txtFiltro"
-        Me.txtFiltro.Size = New System.Drawing.Size(294, 23)
+        Me.txtFiltro.Size = New System.Drawing.Size(194, 23)
         Me.txtFiltro.TabIndex = 1
         '
         'lblFiltro
@@ -227,12 +231,37 @@ Partial Class UcReposicaoEstoque
         Me.btnAtualizar.FlatStyle = System.Windows.Forms.FlatStyle.Flat
         Me.btnAtualizar.Font = New System.Drawing.Font("Segoe UI", 9.0!, System.Drawing.FontStyle.Bold)
         Me.btnAtualizar.ForeColor = System.Drawing.Color.White
-        Me.btnAtualizar.Location = New System.Drawing.Point(350, 7)
+        Me.btnAtualizar.Location = New System.Drawing.Point(250, 7)
         Me.btnAtualizar.Name = "btnAtualizar"
-        Me.btnAtualizar.Size = New System.Drawing.Size(81, 27)
+        Me.btnAtualizar.Size = New System.Drawing.Size(70, 27)
         Me.btnAtualizar.TabIndex = 2
-        Me.btnAtualizar.Text = "Atualizar"
+        Me.btnAtualizar.Text = "Filtrar"
         Me.btnAtualizar.UseVisualStyleBackColor = False
+        '
+        'btnAtualizarPowerQuery
+        '
+        Me.btnAtualizarPowerQuery.Anchor = CType((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+        Me.btnAtualizarPowerQuery.BackColor = System.Drawing.Color.FromArgb(CType(CType(40, Byte), Integer), CType(CType(167, Byte), Integer), CType(CType(69, Byte), Integer))
+        Me.btnAtualizarPowerQuery.FlatStyle = System.Windows.Forms.FlatStyle.Flat
+        Me.btnAtualizarPowerQuery.Font = New System.Drawing.Font("Segoe UI", 9.0!, System.Drawing.FontStyle.Bold)
+        Me.btnAtualizarPowerQuery.ForeColor = System.Drawing.Color.White
+        Me.btnAtualizarPowerQuery.Location = New System.Drawing.Point(326, 7)
+        Me.btnAtualizarPowerQuery.Name = "btnAtualizarPowerQuery"
+        Me.btnAtualizarPowerQuery.Size = New System.Drawing.Size(105, 27)
+        Me.btnAtualizarPowerQuery.TabIndex = 3
+        Me.btnAtualizarPowerQuery.Text = "📊 Atualizar"
+        Me.btnAtualizarPowerQuery.UseVisualStyleBackColor = False
+        '
+        'lblUltimaAtualizacao
+        '
+        Me.lblUltimaAtualizacao.AutoSize = True
+        Me.lblUltimaAtualizacao.Font = New System.Drawing.Font("Segoe UI", 8.0!, System.Drawing.FontStyle.Italic)
+        Me.lblUltimaAtualizacao.ForeColor = System.Drawing.Color.Gray
+        Me.lblUltimaAtualizacao.Location = New System.Drawing.Point(3, 45)
+        Me.lblUltimaAtualizacao.Name = "lblUltimaAtualizacao"
+        Me.lblUltimaAtualizacao.Size = New System.Drawing.Size(120, 13)
+        Me.lblUltimaAtualizacao.TabIndex = 4
+        Me.lblUltimaAtualizacao.Text = "Última atualização: Nunca"
         '
         'grpInclusaoManual
         '
@@ -985,6 +1014,8 @@ Partial Class UcReposicaoEstoque
     Friend WithEvents txtFiltro As TextBox
     Friend WithEvents lblFiltro As Label
     Friend WithEvents btnAtualizar As Button
+    Friend WithEvents btnAtualizarPowerQuery As Button
+    Friend WithEvents lblUltimaAtualizacao As Label
     Friend WithEvents pnlDireita As Panel
     Friend WithEvents splitContainer2 As SplitContainer
     Friend WithEvents pnlSuperior As Panel

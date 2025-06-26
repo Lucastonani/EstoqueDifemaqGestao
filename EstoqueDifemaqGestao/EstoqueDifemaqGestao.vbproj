@@ -192,6 +192,7 @@
     <Compile Include="Config\DatabaseConfig.vb" />
     <Compile Include="Core\PowerQueryManagerExtensions.vb" />
     <Compile Include="Core\PowerQueryManagerOtimizado.vb" />
+    <Compile Include="Core\PowerQueryManagerOptimizedSearch.vb" />
     <Compile Include="Helpers\DataHelper.vb" />
     <Compile Include="Services\DeploymentChecklist.vb" />
     <Compile Include="Helpers\Extensions.vb" />

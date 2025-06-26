@@ -35,6 +35,10 @@ Public Class UcReposicaoEstoque
     Private Shared ultimaLimpezaImagensCache As DateTime = DateTime.MinValue
     Private Const CACHE_IMAGENS_TIMEOUT_MINUTES As Integer = 30
 
+    ' Data da última atualização do Power Query
+    Private Shared ultimaAtualizacaoPowerQuery As DateTime = DateTime.MinValue
+    Private Const CHAVE_ULTIMA_ATUALIZACAO As String = "UltimaAtualizacaoPowerQuery"
+
     ' Sistema de sessão de pedidos
     Private pedidoAtual As New Dictionary(Of String, PedidoItem)
     Private numeroPedidoAtual As String = String.Empty
@@ -63,7 +67,7 @@ Public Class UcReposicaoEstoque
     Public Sub New()
         InitializeComponent()
         ConfigurarComponentes()
-        ' NÃO inicializar dados no construtor - fazer lazy loading
+        ' Dados são carregados automaticamente da sessão anterior em ConfigurarComponentes
     End Sub
 
     Private Sub ConfigurarComponentes()
@@ -86,8 +90,8 @@ Public Class UcReposicaoEstoque
             ' Configurar novos componentes
             ConfigurarNovosComponentes()
 
-            ' Mostrar mensagem inicial
-            AtualizarStatus("Clique em 'Atualizar' para carregar os dados")
+            ' Carregar dados iniciais da sessão anterior
+            CarregarDadosIniciais()
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.ConfigurarComponentes")
@@ -124,6 +128,12 @@ Public Class UcReposicaoEstoque
 
             ' Configurar gráficos
             ConfigurarGraficos()
+
+            ' Configurar novo botão de atualização do Power Query
+            ConfigurarBotaoPowerQuery()
+
+            ' Carregar e exibir data da última atualização
+            CarregarUltimaAtualizacao()
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "ConfigurarNovosComponentes")
@@ -740,13 +750,27 @@ Public Class UcReposicaoEstoque
 
     Private Sub AtualizarGraficos()
         Try
-            If String.IsNullOrEmpty(produtoSelecionado) Then Return
+            If String.IsNullOrEmpty(produtoSelecionado) Then
+                LogErros.RegistrarInfo("⚠️ Produto não selecionado, pulando atualização dos gráficos", "AtualizarGraficos")
+                Return
+            End If
 
-            ' Limpar gráficos
-            If chartComprasMensais.Series.Count > 0 Then
+            LogErros.RegistrarInfo($"📈 Atualizando gráficos para produto: {produtoSelecionado}", "AtualizarGraficos")
+
+            ' ✅ CORREÇÃO: Inicializar séries se não existirem
+            If chartComprasMensais.Series.Count = 0 Then
+                chartComprasMensais.Series.Add("Compras")
+                chartComprasMensais.Series(0).ChartType = DataVisualization.Charting.SeriesChartType.Column
+                LogErros.RegistrarInfo("✅ Série de compras criada", "AtualizarGraficos")
+            Else
                 chartComprasMensais.Series(0).Points.Clear()
             End If
-            If chartVendasMensais.Series.Count > 0 Then
+            
+            If chartVendasMensais.Series.Count = 0 Then
+                chartVendasMensais.Series.Add("Vendas")
+                chartVendasMensais.Series(0).ChartType = DataVisualization.Charting.SeriesChartType.Column
+                LogErros.RegistrarInfo("✅ Série de vendas criada", "AtualizarGraficos")
+            Else
                 chartVendasMensais.Series(0).Points.Clear()
             End If
 
@@ -754,38 +778,291 @@ Public Class UcReposicaoEstoque
                 ' Obter dados dos últimos 24 meses
                 Dim dataInicio = DateTime.Now.AddMonths(-23).Date
                 Dim dataFim = DateTime.Now.Date
+                
+                LogErros.RegistrarInfo($"📅 Período: {dataInicio:dd/MM/yyyy} até {dataFim:dd/MM/yyyy}", "AtualizarGraficos")
 
-                ' Dados de compras
+                ' ✅ CORREÇÃO: Dados de compras com verificação de debug
                 Dim dadosCompras = powerQueryManager.ObterHistoricoComprasPorMes(produtoSelecionado, dataInicio, dataFim)
+                LogErros.RegistrarInfo($"📊 Compras encontradas: {dadosCompras.Count} meses", "AtualizarGraficos")
+                
                 For Each item In dadosCompras
-                    If chartComprasMensais.Series.Count = 0 Then
-                        chartComprasMensais.Series.Add("Compras")
-                    End If
-                    Dim ponto = chartComprasMensais.Series(0).Points.AddXY(item.Key.ToString("MMM/yy"), item.Value)
-                    ' Destacar picos
-                    If item.Value > dadosCompras.Values.Average() * 1.5 Then
-                        chartComprasMensais.Series(0).Points(ponto).MarkerSize = 12
-                        chartComprasMensais.Series(0).Points(ponto).MarkerColor = Color.DarkBlue
-                    End If
+                    Try
+                        Dim ponto = chartComprasMensais.Series(0).Points.AddXY(item.Key.ToString("MMM/yy"), item.Value)
+                        ' Destacar picos
+                        If dadosCompras.Values.Count > 1 AndAlso item.Value > dadosCompras.Values.Average() * 1.5 Then
+                            chartComprasMensais.Series(0).Points(ponto).MarkerSize = 12
+                            chartComprasMensais.Series(0).Points(ponto).MarkerColor = Color.DarkBlue
+                        End If
+                    Catch pointEx As Exception
+                        LogErros.RegistrarErro(pointEx, $"AtualizarGraficos.AdicionarPontoCompras - {item.Key}: {item.Value}")
+                    End Try
                 Next
 
-                ' Dados de vendas
+                ' ✅ CORREÇÃO: Dados de vendas com verificação de debug
                 Dim dadosVendas = powerQueryManager.ObterHistoricoVendasPorMes(produtoSelecionado, dataInicio, dataFim)
+                LogErros.RegistrarInfo($"📊 Vendas encontradas: {dadosVendas.Count} meses", "AtualizarGraficos")
+                
                 For Each item In dadosVendas
-                    If chartVendasMensais.Series.Count = 0 Then
-                        chartVendasMensais.Series.Add("Vendas")
-                    End If
-                    Dim ponto = chartVendasMensais.Series(0).Points.AddXY(item.Key.ToString("MMM/yy"), item.Value)
-                    ' Destacar picos
-                    If item.Value > dadosVendas.Values.Average() * 1.5 Then
-                        chartVendasMensais.Series(0).Points(ponto).MarkerSize = 12
-                        chartVendasMensais.Series(0).Points(ponto).MarkerColor = Color.DarkRed
-                    End If
+                    Try
+                        Dim ponto = chartVendasMensais.Series(0).Points.AddXY(item.Key.ToString("MMM/yy"), item.Value)
+                        ' Destacar picos
+                        If dadosVendas.Values.Count > 1 AndAlso item.Value > dadosVendas.Values.Average() * 1.5 Then
+                            chartVendasMensais.Series(0).Points(ponto).MarkerSize = 12
+                            chartVendasMensais.Series(0).Points(ponto).MarkerColor = Color.DarkRed
+                        End If
+                    Catch pointEx As Exception
+                        LogErros.RegistrarErro(pointEx, $"AtualizarGraficos.AdicionarPontoVendas - {item.Key}: {item.Value}")
+                    End Try
                 Next
+                
+                LogErros.RegistrarInfo($"✅ Gráficos atualizados - Compras: {chartComprasMensais.Series(0).Points.Count} pontos, Vendas: {chartVendasMensais.Series(0).Points.Count} pontos", "AtualizarGraficos")
+            Else
+                LogErros.RegistrarInfo("⚠️ PowerQueryManager é null, não foi possível obter dados dos gráficos", "AtualizarGraficos")
             End If
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "AtualizarGraficos")
+        End Try
+    End Sub
+
+    Private Sub AtualizarGraficosComDados(dados As Dictionary(Of String, System.Data.DataTable), codigoProduto As String)
+        Try
+            If String.IsNullOrEmpty(codigoProduto) Then
+                LogErros.RegistrarInfo("⚠️ Produto não informado, pulando atualização dos gráficos", "AtualizarGraficosComDados")
+                Return
+            End If
+
+            LogErros.RegistrarInfo($"📈 Atualizando gráficos com dados carregados para produto: {codigoProduto}", "AtualizarGraficosComDados")
+
+            ' Inicializar séries se não existirem
+            If chartComprasMensais.Series.Count = 0 Then
+                chartComprasMensais.Series.Add("Compras")
+                chartComprasMensais.Series(0).ChartType = DataVisualization.Charting.SeriesChartType.Column
+                LogErros.RegistrarInfo("✅ Série de compras criada", "AtualizarGraficosComDados")
+            Else
+                chartComprasMensais.Series(0).Points.Clear()
+            End If
+            
+            If chartVendasMensais.Series.Count = 0 Then
+                chartVendasMensais.Series.Add("Vendas")
+                chartVendasMensais.Series(0).ChartType = DataVisualization.Charting.SeriesChartType.Column
+                LogErros.RegistrarInfo("✅ Série de vendas criada", "AtualizarGraficosComDados")
+            Else
+                chartVendasMensais.Series(0).Points.Clear()
+            End If
+
+            ' Processar dados de compras diretamente do DataTable
+            If dados.ContainsKey("compras") Then
+                Dim dadosCompras = dados("compras")
+                LogErros.RegistrarInfo($"📊 Processando {dadosCompras.Rows.Count} registros de compras", "AtualizarGraficosComDados")
+                
+                If dadosCompras.Rows.Count > 0 Then
+                    PreencherGraficoDeDataTable(chartComprasMensais, dadosCompras, "Compras")
+                Else
+                    ' Sem dados de compras - exibir gráfico vazio com mensagem
+                    ExibirGraficoVazio(chartComprasMensais, "Sem dados de compras")
+                End If
+            Else
+                ExibirGraficoVazio(chartComprasMensais, "Sem dados de compras")
+            End If
+
+            ' Processar dados de vendas diretamente do DataTable
+            If dados.ContainsKey("vendas") Then
+                Dim dadosVendas = dados("vendas")
+                LogErros.RegistrarInfo($"📊 Processando {dadosVendas.Rows.Count} registros de vendas", "AtualizarGraficosComDados")
+                
+                If dadosVendas.Rows.Count > 0 Then
+                    PreencherGraficoDeDataTable(chartVendasMensais, dadosVendas, "Vendas")
+                Else
+                    ' Sem dados de vendas - exibir gráfico vazio com mensagem
+                    ExibirGraficoVazio(chartVendasMensais, "Sem dados de vendas")
+                End If
+            Else
+                ExibirGraficoVazio(chartVendasMensais, "Sem dados de vendas")
+            End If
+
+            ' Atualizar contadores dos títulos dos grupos
+            Dim pontosCompras = If(chartComprasMensais.Series.Count > 0, chartComprasMensais.Series(0).Points.Count, 0)
+            grpCompras.Text = $"📈 Compras ({pontosCompras} meses)"
+            
+            Dim pontosVendas = If(chartVendasMensais.Series.Count > 0, chartVendasMensais.Series(0).Points.Count, 0)
+            grpVendas.Text = $"📉 Vendas ({pontosVendas} meses)"
+
+            LogErros.RegistrarInfo("✅ Gráficos atualizados com dados carregados", "AtualizarGraficosComDados")
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "AtualizarGraficosComDados")
+        End Try
+    End Sub
+
+    Private Sub PreencherGraficoDeDataTable(chart As DataVisualization.Charting.Chart, dataTable As System.Data.DataTable, tipoOperacao As String)
+        Try
+            If dataTable Is Nothing OrElse dataTable.Rows.Count = 0 Then
+                LogErros.RegistrarInfo($"⚠️ Nenhum dado de {tipoOperacao.ToLower()} para processar", "PreencherGraficoDeDataTable")
+                ExibirGraficoVazio(chart, $"Sem dados de {tipoOperacao.ToLower()}")
+                Return
+            End If
+
+            ' Debug: Listar todas as colunas disponíveis
+            Dim colunas = String.Join(", ", dataTable.Columns.Cast(Of DataColumn)().Select(Function(c) c.ColumnName))
+            LogErros.RegistrarInfo($"📋 Colunas disponíveis para {tipoOperacao}: {colunas}", "PreencherGraficoDeDataTable")
+
+            ' Agrupar dados por mês/ano (assumindo que há colunas de data e quantidade/valor)
+            Dim dadosPorMes As New Dictionary(Of DateTime, Decimal)
+
+            ' Tentar encontrar colunas de data e valor
+            Dim colunaData As DataColumn = Nothing
+            Dim colunaValor As DataColumn = Nothing
+
+            ' Buscar coluna de data (várias possibilidades)
+            For Each col As DataColumn In dataTable.Columns
+                Dim nomeCol = col.ColumnName.ToLower()
+                If nomeCol.Contains("data") OrElse nomeCol.Contains("date") OrElse nomeCol.Contains("mes") OrElse nomeCol.Contains("ano") Then
+                    colunaData = col
+                    LogErros.RegistrarInfo($"🗓️ Coluna de data encontrada: {col.ColumnName}", "PreencherGraficoDeDataTable")
+                    Exit For
+                End If
+            Next
+
+            ' Buscar coluna de valor/quantidade (mais opções)
+            For Each col As DataColumn In dataTable.Columns
+                Dim nomeCol = col.ColumnName.ToLower()
+                If nomeCol.Contains("quantidade") OrElse nomeCol.Contains("valor") OrElse nomeCol.Contains("qtd") OrElse 
+                   nomeCol.Contains("preco") OrElse nomeCol.Contains("total") OrElse nomeCol.Contains("amount") OrElse
+                   nomeCol.Contains("volume") OrElse nomeCol.Contains("sum") Then
+                    colunaValor = col
+                    LogErros.RegistrarInfo($"💰 Coluna de valor encontrada: {col.ColumnName}", "PreencherGraficoDeDataTable")
+                    Exit For
+                End If
+            Next
+
+            ' Se não encontrou colunas específicas, tentar usar as primeiras disponíveis
+            If colunaData Is Nothing AndAlso dataTable.Columns.Count > 0 Then
+                colunaData = dataTable.Columns(0)
+                LogErros.RegistrarInfo($"🔄 Usando primeira coluna como data: {colunaData.ColumnName}", "PreencherGraficoDeDataTable")
+            End If
+
+            If colunaValor Is Nothing AndAlso dataTable.Columns.Count > 1 Then
+                colunaValor = dataTable.Columns(1)
+                LogErros.RegistrarInfo($"🔄 Usando segunda coluna como valor: {colunaValor.ColumnName}", "PreencherGraficoDeDataTable")
+            End If
+
+            If colunaData IsNot Nothing AndAlso colunaValor IsNot Nothing Then
+                ' Processar dados com colunas identificadas
+                For Each row As DataRow In dataTable.Rows
+                    Try
+                        Dim dataOperacao As DateTime
+                        Dim valor As Decimal = 0
+
+                        If DateTime.TryParse(row(colunaData).ToString(), dataOperacao) AndAlso
+                           Decimal.TryParse(row(colunaValor).ToString(), valor) Then
+                            
+                            Dim mesAno = New DateTime(dataOperacao.Year, dataOperacao.Month, 1)
+                            
+                            If dadosPorMes.ContainsKey(mesAno) Then
+                                dadosPorMes(mesAno) += valor
+                            Else
+                                dadosPorMes(mesAno) = valor
+                            End If
+                        End If
+                    Catch rowEx As Exception
+                        LogErros.RegistrarErro(rowEx, $"PreencherGraficoDeDataTable.ProcessarLinha_{tipoOperacao}")
+                    End Try
+                Next
+
+                ' Adicionar pontos ao gráfico
+                If dadosPorMes.Count > 0 Then
+                    For Each item In dadosPorMes.OrderBy(Function(x) x.Key)
+                        Try
+                            chart.Series(0).Points.AddXY(item.Key.ToString("MMM/yy"), item.Value)
+                        Catch pointEx As Exception
+                            LogErros.RegistrarErro(pointEx, $"PreencherGraficoDeDataTable.AdicionarPonto_{tipoOperacao}")
+                        End Try
+                    Next
+
+                    LogErros.RegistrarInfo($"✅ Gráfico de {tipoOperacao.ToLower()} preenchido com {dadosPorMes.Count} pontos", "PreencherGraficoDeDataTable")
+                Else
+                    LogErros.RegistrarInfo($"⚠️ Nenhum ponto válido gerado para {tipoOperacao.ToLower()}", "PreencherGraficoDeDataTable")
+                    ExibirGraficoVazio(chart, $"Dados inválidos para {tipoOperacao.ToLower()}")
+                End If
+            Else
+                LogErros.RegistrarInfo($"⚠️ Colunas de data/valor não encontradas para {tipoOperacao.ToLower()}", "PreencherGraficoDeDataTable")
+                
+                ' Fallback: Tentar criar um gráfico simples com dados brutos
+                If dataTable.Rows.Count <= 24 Then ' Máximo 24 pontos
+                    TentarGraficoSimples(chart, dataTable, tipoOperacao)
+                Else
+                    ExibirGraficoVazio(chart, $"Estrutura de dados não reconhecida para {tipoOperacao.ToLower()}")
+                End If
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, $"PreencherGraficoDeDataTable_{tipoOperacao}")
+        End Try
+    End Sub
+
+    Private Sub ExibirGraficoVazio(chart As DataVisualization.Charting.Chart, mensagem As String)
+        Try
+            ' Limpar pontos existentes
+            If chart.Series.Count > 0 Then
+                chart.Series(0).Points.Clear()
+            End If
+
+            ' Adicionar um ponto com valor zero para mostrar que o gráfico está vazio
+            If chart.Series.Count > 0 Then
+                chart.Series(0).Points.AddXY("Sem dados", 0)
+                chart.Series(0).Points(0).Color = Color.LightGray
+                chart.Series(0).Points(0).Label = mensagem
+            End If
+
+            LogErros.RegistrarInfo($"📊 Gráfico configurado como vazio: {mensagem}", "ExibirGraficoVazio")
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "ExibirGraficoVazio")
+        End Try
+    End Sub
+
+    Private Sub TentarGraficoSimples(chart As DataVisualization.Charting.Chart, dataTable As System.Data.DataTable, tipoOperacao As String)
+        Try
+            LogErros.RegistrarInfo($"🔄 Tentando gráfico simples para {tipoOperacao} com {dataTable.Rows.Count} linhas", "TentarGraficoSimples")
+
+            Dim pontoAdicionado As Boolean = False
+
+            ' Tentar usar primeira e segunda colunas como X e Y
+            If dataTable.Columns.Count >= 2 Then
+                Dim contador As Integer = 0
+                For Each row As DataRow In dataTable.Rows
+                    If contador >= 24 Then Exit For ' Limitar a 24 pontos
+                    
+                    Try
+                        Dim x = If(row(0) IsNot Nothing, row(0).ToString(), $"Item {contador + 1}")
+                        Dim y As Decimal = 0
+                        
+                        ' Tentar converter segunda coluna para número
+                        If Not Decimal.TryParse(row(1).ToString(), y) Then
+                            y = contador + 1 ' Valor padrão crescente
+                        End If
+
+                        chart.Series(0).Points.AddXY(x, y)
+                        pontoAdicionado = True
+                        contador += 1
+
+                    Catch rowEx As Exception
+                        LogErros.RegistrarErro(rowEx, $"TentarGraficoSimples.ProcessarLinha_{tipoOperacao}")
+                    End Try
+                Next
+            End If
+
+            If pontoAdicionado Then
+                LogErros.RegistrarInfo($"✅ Gráfico simples criado para {tipoOperacao} com {chart.Series(0).Points.Count} pontos", "TentarGraficoSimples")
+            Else
+                LogErros.RegistrarInfo($"⚠️ Não foi possível criar gráfico simples para {tipoOperacao}", "TentarGraficoSimples")
+                ExibirGraficoVazio(chart, $"Falha ao processar dados de {tipoOperacao.ToLower()}")
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, $"TentarGraficoSimples_{tipoOperacao}")
+            ExibirGraficoVazio(chart, $"Erro ao processar {tipoOperacao.ToLower()}")
         End Try
     End Sub
 
@@ -854,10 +1131,39 @@ Public Class UcReposicaoEstoque
 
     Private Sub BtnAtualizar_Click(sender As Object, e As EventArgs)
         Try
+            ' Aplicar filtro nos dados já carregados
+            AplicarFiltro()
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.BtnAtualizar_Click")
+            MessageBox.Show($"Erro ao aplicar filtro: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Sub RestaurarBotaoAtualizar()
+        Try
+            btnAtualizar.Enabled = True
+            btnAtualizar.Text = "Filtrar"
+            btnAtualizar.BackColor = Color.FromArgb(0, 123, 255)
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "RestaurarBotaoAtualizar")
+        End Try
+    End Sub
+
+    Private Sub ConfigurarBotaoPowerQuery()
+        Try
+            ' Configurar evento do novo botão
+            AddHandler btnAtualizarPowerQuery.Click, AddressOf BtnAtualizarPowerQuery_Click
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "ConfigurarBotaoPowerQuery")
+        End Try
+    End Sub
+
+    Private Sub BtnAtualizarPowerQuery_Click(sender As Object, e As EventArgs)
+        Try
             ' Desabilitar botão imediatamente
-            btnAtualizar.Enabled = False
-            btnAtualizar.Text = "Atualizando..."
-            btnAtualizar.BackColor = Color.Orange
+            btnAtualizarPowerQuery.Enabled = False
+            btnAtualizarPowerQuery.Text = "Atualizando..."
+            btnAtualizarPowerQuery.BackColor = Color.Orange
 
             ' Mostrar status
             AtualizarStatus("Atualizando dados do Power Query...")
@@ -869,7 +1175,14 @@ Public Class UcReposicaoEstoque
                              powerQueryManager = PowerQueryManager.GetInstance()
                              If powerQueryManager IsNot Nothing Then
                                  powerQueryManager.AtualizarDados()
+                                 
+                                 ' Debug das tabelas disponíveis
+                                 Dim tabelasDisponiveis = powerQueryManager.ListarTabelas()
+                                 LogErros.RegistrarInfo($"📁 Tabelas disponíveis após atualização: {String.Join(", ", tabelasDisponiveis)}", "BtnAtualizarPowerQuery_Click")
                              End If
+
+                             ' Atualizar data da última atualização
+                             SalvarUltimaAtualizacao()
 
                              ' Voltar para thread principal
                              Me.Invoke(Sub()
@@ -883,11 +1196,14 @@ Public Class UcReposicaoEstoque
                                                ' Limpar caches
                                                InvalidarCacheCompleto()
 
+                                               ' Atualizar label da data
+                                               AtualizarLabelUltimaAtualizacao()
+
                                                ' Mostrar mensagem de sucesso
-                                               MessageBox.Show("Dados atualizados com sucesso!", "Sucesso",
+                                               MessageBox.Show("Dados do Power Query atualizados com sucesso!", "Sucesso",
                                                          MessageBoxButtons.OK, MessageBoxIcon.Information)
                                            Catch loadEx As Exception
-                                               LogErros.RegistrarErro(loadEx, "BtnAtualizar_Click.CarregarProdutos")
+                                               LogErros.RegistrarErro(loadEx, "BtnAtualizarPowerQuery_Click.CarregarProdutos")
                                                AtualizarStatus("Erro ao carregar produtos após atualização")
                                                MessageBox.Show($"Erro ao carregar produtos: {loadEx.Message}", "Erro",
                                                          MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -895,7 +1211,7 @@ Public Class UcReposicaoEstoque
                                        End Sub)
 
                          Catch ex As Exception
-                             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.BtnAtualizar_Click.Background")
+                             LogErros.RegistrarErro(ex, "UcReposicaoEstoque.BtnAtualizarPowerQuery_Click.Background")
                              Me.Invoke(Sub()
                                            AtualizarStatus("Erro na atualização dos dados")
                                            MessageBox.Show($"Erro ao atualizar dados: {ex.Message}", "Erro",
@@ -904,26 +1220,193 @@ Public Class UcReposicaoEstoque
                          Finally
                              ' SEMPRE restaurar o botão
                              Me.Invoke(Sub()
-                                           RestaurarBotaoAtualizar()
+                                           RestaurarBotaoPowerQuery()
                                        End Sub)
                          End Try
                      End Sub)
 
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.BtnAtualizar_Click")
+            LogErros.RegistrarErro(ex, "UcReposicaoEstoque.BtnAtualizarPowerQuery_Click")
             AtualizarStatus("Erro na atualização")
             MessageBox.Show($"Erro ao atualizar dados: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            RestaurarBotaoAtualizar()
+            RestaurarBotaoPowerQuery()
         End Try
     End Sub
 
-    Private Sub RestaurarBotaoAtualizar()
+    Private Sub RestaurarBotaoPowerQuery()
         Try
-            btnAtualizar.Enabled = True
-            btnAtualizar.Text = "Atualizar"
-            btnAtualizar.BackColor = Color.FromArgb(0, 123, 255)
+            btnAtualizarPowerQuery.Enabled = True
+            btnAtualizarPowerQuery.Text = "📊 Atualizar"
+            btnAtualizarPowerQuery.BackColor = Color.FromArgb(40, 167, 69)
         Catch ex As Exception
-            LogErros.RegistrarErro(ex, "RestaurarBotaoAtualizar")
+            LogErros.RegistrarErro(ex, "RestaurarBotaoPowerQuery")
+        End Try
+    End Sub
+
+    Private Sub CarregarUltimaAtualizacao()
+        Try
+            ' Tentar carregar da configuração (pode ser Registry, arquivo config, etc.)
+            ' Por simplicidade, vamos usar um arquivo temporário no diretório de logs
+            Dim arquivoConfig As String = Path.Combine("C:\Logs\GestaoEstoque", "ultima_atualizacao.txt")
+            
+            If File.Exists(arquivoConfig) Then
+                Dim textoData As String = File.ReadAllText(arquivoConfig).Trim()
+                If DateTime.TryParse(textoData, ultimaAtualizacaoPowerQuery) Then
+                    AtualizarLabelUltimaAtualizacao()
+                Else
+                    ultimaAtualizacaoPowerQuery = DateTime.MinValue
+                    lblUltimaAtualizacao.Text = "Última atualização: Nunca"
+                End If
+            Else
+                ultimaAtualizacaoPowerQuery = DateTime.MinValue
+                lblUltimaAtualizacao.Text = "Última atualização: Nunca"
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "CarregarUltimaAtualizacao")
+            lblUltimaAtualizacao.Text = "Última atualização: Nunca"
+        End Try
+    End Sub
+
+    Private Sub SalvarUltimaAtualizacao()
+        Try
+            ultimaAtualizacaoPowerQuery = DateTime.Now
+            
+            ' Salvar em arquivo temporário
+            Dim arquivoConfig As String = Path.Combine("C:\Logs\GestaoEstoque", "ultima_atualizacao.txt")
+            Dim diretorio As String = Path.GetDirectoryName(arquivoConfig)
+            
+            If Not Directory.Exists(diretorio) Then
+                Directory.CreateDirectory(diretorio)
+            End If
+            
+            File.WriteAllText(arquivoConfig, ultimaAtualizacaoPowerQuery.ToString("yyyy-MM-dd HH:mm:ss"))
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "SalvarUltimaAtualizacao")
+        End Try
+    End Sub
+
+    Private Sub AtualizarLabelUltimaAtualizacao()
+        Try
+            If ultimaAtualizacaoPowerQuery = DateTime.MinValue Then
+                lblUltimaAtualizacao.Text = "Última atualização: Nunca"
+            Else
+                lblUltimaAtualizacao.Text = $"✅ Atualizado: {ultimaAtualizacaoPowerQuery:dd/MM/yyyy HH:mm}"
+            End If
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "AtualizarLabelUltimaAtualizacao")
+        End Try
+    End Sub
+
+    Private Sub CarregarDadosIniciais()
+        Try
+            ' Mostrar status de carregamento inicial
+            AtualizarStatus("Verificando dados da sessão anterior...")
+            
+            ' Executar em background para não travar a UI
+            Task.Run(Sub()
+                         Try
+                             ' Inicializar PowerQueryManager se necessário
+                             If powerQueryManager Is Nothing Then
+                                 powerQueryManager = PowerQueryManager.GetInstance()
+                             End If
+
+                             If powerQueryManager IsNot Nothing Then
+                                 ' Verificar se existem tabelas Power Query disponíveis
+                                 Dim tabelasDisponiveis = powerQueryManager.ListarTabelas()
+                                 LogErros.RegistrarInfo($"Tabelas encontradas na inicialização: {String.Join(", ", tabelasDisponiveis)}", "CarregarDadosIniciais")
+                                 
+                                 ' Verificar especificamente se tblProdutos existe
+                                 Dim tabelaProdutos = powerQueryManager.ObterTabela("tblProdutos")
+                                 
+                                 If tabelaProdutos IsNot Nothing Then
+                                     ' Há dados disponíveis - carregar
+                                     Me.Invoke(Sub()
+                                                   Try
+                                                       ' Carregar produtos sem atualizar Power Query
+                                                       CarregarProdutosSemAtualizacao()
+                                                       
+                                                       ' Carregar lojas para o combo
+                                                       CarregarLojas()
+                                                       
+                                                       ' Mostrar status de sucesso
+                                                       AtualizarStatus($"Dados carregados ({DateTime.Now:HH:mm}) - Use 📊 Atualizar para dados mais recentes")
+                                                       
+                                                       ' Marcar como dados carregados
+                                                       dadosCarregados = True
+                                                       
+                                                       ' Atualizar indicador de que dados são da sessão anterior
+                                                       If ultimaAtualizacaoPowerQuery <> DateTime.MinValue Then
+                                                           lblUltimaAtualizacao.Text = $"📄 Dados da sessão: {ultimaAtualizacaoPowerQuery:dd/MM/yyyy HH:mm}"
+                                                       End If
+                                                       
+                                                   Catch loadEx As Exception
+                                                       LogErros.RegistrarErro(loadEx, "CarregarDadosIniciais.CarregarDados")
+                                                       AtualizarStatus("Erro ao carregar dados - Clique em 📊 Atualizar")
+                                                   End Try
+                                               End Sub)
+                                 Else
+                                     ' Não há dados disponíveis - primeira execução
+                                     Me.Invoke(Sub()
+                                                   AtualizarStatus("Primeira execução - Clique em 📊 Atualizar para carregar dados")
+                                                   LogErros.RegistrarInfo("Nenhuma tabela Power Query encontrada - primeira execução", "CarregarDadosIniciais")
+                                               End Sub)
+                                 End If
+                             Else
+                                 Me.Invoke(Sub()
+                                               AtualizarStatus("PowerQuery não disponível - Clique em 📊 Atualizar")
+                                           End Sub)
+                             End If
+
+                         Catch ex As Exception
+                             LogErros.RegistrarErro(ex, "CarregarDadosIniciais.Background")
+                             Me.Invoke(Sub()
+                                           AtualizarStatus("Erro na verificação inicial - Clique em 📊 Atualizar")
+                                       End Sub)
+                         End Try
+                     End Sub)
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "CarregarDadosIniciais")
+            AtualizarStatus("Erro na verificação inicial - Clique em 📊 Atualizar")
+        End Try
+    End Sub
+
+    Private Sub CarregarProdutosSemAtualizacao()
+        Try
+            ' Tentar usar dados já existentes do PowerQuery sem atualizar
+            dadosProdutosOriginais = powerQueryManager.ObterProdutos()
+
+            If dadosProdutosOriginais IsNot Nothing AndAlso dadosProdutosOriginais.Rows.Count > 0 Then
+                ' Aplicar dados ao grid
+                dgvProdutos.DataSource = dadosProdutosOriginais
+                
+                ' Atualizar contador de produtos
+                AtualizarContadorProdutos(dadosProdutosOriginais.Rows.Count)
+                
+                ' Marcar colunas como configuradas
+                If Not colunasConfiguradas Then
+                    colunasConfiguradas = True
+                End If
+
+                ' Aplicar filtro se existir
+                If Not String.IsNullOrEmpty(filtroAtual) Then
+                    AplicarFiltro()
+                End If
+
+                LogErros.RegistrarInfo($"Produtos carregados da sessão anterior: {dadosProdutosOriginais.Rows.Count} itens", "CarregarProdutosSemAtualizacao")
+            Else
+                ' Se não há dados, mostrar mensagem para atualizar
+                AtualizarStatus("Nenhum dado encontrado - Clique em 📊 Atualizar para carregar")
+                LogErros.RegistrarInfo("Nenhum produto encontrado na sessão anterior", "CarregarProdutosSemAtualizacao")
+                
+                ' Mostrar mensagem mais específica no label
+                lblUltimaAtualizacao.Text = "⚠️ Primeira execução - Execute 📊 Atualizar"
+            End If
+
+        Catch ex As Exception
+            LogErros.RegistrarErro(ex, "CarregarProdutosSemAtualizacao")
+            AtualizarStatus("Erro ao carregar produtos - Clique em 📊 Atualizar")
+            lblUltimaAtualizacao.Text = "❌ Erro no carregamento"
         End Try
     End Sub
 
@@ -1030,8 +1513,11 @@ Public Class UcReposicaoEstoque
 
     Private Sub AplicarDadosUltraRapido(dados As Dictionary(Of String, System.Data.DataTable), codigoProduto As String)
         Try
-            ' Aplicar dados sem configurar colunas novamente
-            dgvEstoque.DataSource = dados("estoque")
+            ' ✅ CORREÇÃO: Aplicar dados com verificação de debug
+            Dim dadosEstoque = dados("estoque")
+            LogErros.RegistrarInfo($"📊 Aplicando dados de estoque: {dadosEstoque.Rows.Count} registros para produto {codigoProduto}", "AplicarDadosUltraRapido")
+            
+            dgvEstoque.DataSource = dadosEstoque
 
             ' Configurar colunas apenas UMA VEZ
             If Not colunasConfiguradas Then
@@ -1039,10 +1525,27 @@ Public Class UcReposicaoEstoque
                 colunasConfiguradas = True
             End If
 
-            ' Atualizar contadores nos GroupBox
-            grpEstoque.Text = $"📊 Estoque Atual ({dados("estoque").Rows.Count} registros)"
-            grpCompras.Text = $"📈 Compras ({chartComprasMensais.Series(0).Points.Count} meses)"
-            grpVendas.Text = $"📉 Vendas ({chartVendasMensais.Series(0).Points.Count} meses)"
+            ' ✅ CORREÇÃO: Atualizar contadores com verificação de séries
+            grpEstoque.Text = $"📊 Estoque Atual ({dadosEstoque.Rows.Count} registros)"
+            
+            Try
+                Dim pontosCompras = If(chartComprasMensais.Series.Count > 0, chartComprasMensais.Series(0).Points.Count, 0)
+                grpCompras.Text = $"📈 Compras ({pontosCompras} meses)"
+            Catch
+                grpCompras.Text = "📈 Histórico de Compras (24 meses)"
+            End Try
+            
+            Try
+                Dim pontosVendas = If(chartVendasMensais.Series.Count > 0, chartVendasMensais.Series(0).Points.Count, 0)
+                grpVendas.Text = $"📉 Vendas ({pontosVendas} meses)"
+            Catch
+                grpVendas.Text = "📉 Histórico de Vendas (24 meses)"
+            End Try
+            
+            ' ✅ CORREÇÃO: Atualizar gráficos com dados de compras e vendas
+            AtualizarGraficosComDados(dados, codigoProduto)
+            
+            LogErros.RegistrarInfo($"✅ Dados aplicados com sucesso no dgvEstoque", "AplicarDadosUltraRapido")
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "AplicarDadosUltraRapido")
@@ -1157,8 +1660,9 @@ Public Class UcReposicaoEstoque
         Try
             LogErros.RegistrarInfo($"🔍 Iniciando carregamento de imagem para: {codigoProduto}", "CarregarImagem")
 
-            ' Verificar cache de imagem primeiro
-            If cacheImagens.ContainsKey(codigoProduto) Then
+            ' ✅ CORREÇÃO: Forçar recarregamento sempre para corrigir problema de cache
+            ' Verificar cache de imagem primeiro (mas não aplicar se produto mudou)
+            If cacheImagens.ContainsKey(codigoProduto) AndAlso produtoSelecionado = codigoProduto Then
                 LogErros.RegistrarInfo($"📦 Imagem encontrada no cache para: {codigoProduto}", "CarregarImagem")
                 If Me.InvokeRequired Then
                     Me.Invoke(Sub() AplicarImagemDoCache(codigoProduto))
@@ -1184,20 +1688,30 @@ Public Class UcReposicaoEstoque
             Dim caminhoImagem = BuscarImagemProduto(codigoProduto)
 
             If Not String.IsNullOrEmpty(caminhoImagem) AndAlso File.Exists(caminhoImagem) Then
-                Using fs As New FileStream(caminhoImagem, FileMode.Open, FileAccess.Read)
-                    Dim imagem = Image.FromStream(fs)
+                Try
+                    ' ✅ CORREÇÃO: Criar cópia da imagem para evitar problemas de concorrência
+                    Using fs As New FileStream(caminhoImagem, FileMode.Open, FileAccess.Read)
+                        Using tempImage = Image.FromStream(fs)
+                            ' Criar cópia para evitar lock do arquivo
+                            Dim imagem As New Bitmap(tempImage)
+                            
+                            ' Adicionar ao cache
+                            cacheImagens(codigoProduto) = imagem
+                            cacheStatusImagens(codigoProduto) = "OK"
 
-                    ' Adicionar ao cache
-                    cacheImagens(codigoProduto) = imagem
-                    cacheStatusImagens(codigoProduto) = "OK"
-
-                    ' Aplicar imagem
-                    If Me.InvokeRequired Then
-                        Me.Invoke(Sub() AplicarImagem(imagem, codigoProduto))
-                    Else
-                        AplicarImagem(imagem, codigoProduto)
-                    End If
-                End Using
+                            ' Aplicar imagem
+                            If Me.InvokeRequired Then
+                                Me.Invoke(Sub() AplicarImagem(imagem, codigoProduto))
+                            Else
+                                AplicarImagem(imagem, codigoProduto)
+                            End If
+                        End Using
+                    End Using
+                Catch imageLoadEx As Exception
+                    LogErros.RegistrarErro(imageLoadEx, $"CarregarImagemProdutoAsync.CarregarArquivo - {caminhoImagem}")
+                    cacheStatusImagens(codigoProduto) = "ERRO_ARQUIVO"
+                    AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Arquivo corrompido", Nothing)
+                End Try
             Else
                 cacheStatusImagens(codigoProduto) = "NAO_ENCONTRADA"
                 AplicarImagemStatus(codigoProduto, "🖼️ Imagem do Produto - Não encontrada", Nothing)
@@ -1233,15 +1747,35 @@ Public Class UcReposicaoEstoque
 
     Private Sub AplicarImagem(imagem As Image, codigoProduto As String)
         Try
-            If pbProduto.Image IsNot Nothing Then
-                pbProduto.Image.Dispose()
+            ' ✅ CORREÇÃO: Verificar se a imagem é válida antes de aplicar
+            If imagem IsNot Nothing Then
+                Try
+                    ' Testar se a imagem é válida
+                    Dim testSize = imagem.Size
+                    
+                    ' Limpar imagem anterior apenas se nova imagem é válida
+                    If pbProduto.Image IsNot Nothing Then
+                        Dim oldImage = pbProduto.Image
+                        pbProduto.Image = Nothing
+                        oldImage.Dispose()
+                    End If
+                    
+                    pbProduto.Image = imagem
+                    grpImagem.Text = $"🖼️ Imagem do Produto - {codigoProduto}"
+                    
+                    LogErros.RegistrarInfo($"✅ Imagem aplicada com sucesso para produto: {codigoProduto}", "AplicarImagem")
+                    
+                Catch imageEx As Exception
+                    LogErros.RegistrarErro(imageEx, $"AplicarImagem.ValidarImagem - {codigoProduto}")
+                    grpImagem.Text = $"🖼️ Imagem do Produto - {codigoProduto} (Erro)"
+                End Try
+            Else
+                grpImagem.Text = $"🖼️ Imagem do Produto - {codigoProduto} (Não disponível)"
             End If
-
-            pbProduto.Image = imagem
-            grpImagem.Text = $"🖼️ Imagem do Produto - {codigoProduto}"
 
         Catch ex As Exception
             LogErros.RegistrarErro(ex, "AplicarImagem")
+            grpImagem.Text = $"🖼️ Imagem do Produto - Erro"
         End Try
     End Sub
 
